@@ -1,6 +1,6 @@
 import numpy as np
 from shapely import affinity 
-from shapely.geometry import Point
+from shapely.geometry import Point, MultiPoint
 from shapely.geometry.polygon import Polygon, LinearRing, LineString
 import random
 from itertools import permutations, combinations
@@ -41,14 +41,27 @@ def verticalconstraint(p1,p2,p3): #check if p3 is in Jae's vertical constraint m
         m = -(p1[0]-p2[0])/(p1[1]-p2[1])
         return (min(p1[1]-m*p1[0],p2[1]-m*p2[0]) <= p3[1] - m*p3[0] <= max(p1[1]-m*p1[0],p2[1]-m*p2[0]))
 
+def distconstraint(p1,p2,p3,n): # Marcus conjectures n=1/4 or n=1/8. Formula straight from wiki page on point to a line with small modifications
+    return abs((p2[0]-p1[0])*(p1[1]-p3[1]) - (p1[0]-p3[0])*(p2[1]-p1[1])) <= n*((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)
+
+def reversedist(p1,p2,p3,n):
+    return ((1-2*n**2)/(2*n))*((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2) <  abs((p2[0]-p1[0])*(p1[1]-p3[1]) - (p1[0]-p3[0])*(p2[1]-p1[1]))
+    
+def boundaryconstraint(p1,p2):
+    return hullboundary.contains(Point(p1)) and hullboundary.contains(Point(p2))
 
 n= int(input("How many terminals (in numerals)? "))
+
+c = (2-sqrt(3))/(1-(2-sqrt(3))**2)
 
 pointlist = []
 
 for i in range(n): #randomly generates points
 	newpoint = (random.random(),random.random())
 	pointlist.append(newpoint)
+
+hullboundary = MultiPoint(pointlist).convex_hull.boundary
+
 
 interiorcounter = 0
 i = 0
@@ -71,10 +84,26 @@ print("\nWe discounted ", interiorcounter, " of ", combs, " possibilities using 
 
 vertcounter = 0
 pentinteriorcounter = 0
-bothcounter = 0
+dist4counter = 0
+dist8counter = 0
+revdist4counter = 0
+boundarycounter = 0
+allcounter = 0 
 i = 0
 
 for combo in permutations(pointlist, 3):  # 2 for pairs, 3 for triplets, etc
+    dist8checker = distconstraint(combo[0],combo[1],combo[2],1/8)
+    dist4checker = distconstraint(combo[0],combo[1],combo[2],c)
+    revdist4checker = reversedist(combo[0],combo[1],combo[2],c)
+    boundarychecker = boundaryconstraint(combo[0],combo[1])
+    if boundarychecker:
+        boundarycounter += 1
+    if dist8checker:
+        dist8counter += 1
+    if dist4checker:
+        dist4counter += 1   
+    if revdist4checker:
+        revdist4counter += 1
     vertchecker = verticalconstraint(combo[0],combo[1],combo[2])
     if not vertchecker: #for checking vertical constraint
         vertcounter += 1
@@ -131,17 +160,22 @@ for combo in permutations(pointlist, 3):  # 2 for pairs, 3 for triplets, etc
             polygonempty = False
     if not polygonempty:
         pentinteriorcounter += 1
-    if not vertchecker or not polygonempty: #for checking either constraint
-        bothcounter += 1
+    if (((not vertchecker or not polygonempty) or dist4checker) or revdist4checker) or boundarychecker:
+        allcounter += 1
     i += 1                
     sys.stdout.write("\rCalculating iteration %i of %i of Part 2. That's %f %%" % (i,perms, i/perms *100))
     sys.stdout.flush()
 
 print("\nWe discounted ", vertcounter, " of ", perms, " possibilities using the vertical constraint. That's ", 100*vertcounter/(perms), "%")
 print("We discounted ", pentinteriorcounter, " of ", perms, " possibilities using the pentagon. That's ", 100*pentinteriorcounter/(perms), "%")
-print("We discounted ", bothcounter, " of ", perms, " possibilities combining the pentagon and vertical constraint. That's ", 100*bothcounter/(perms), "%")
+print("We discounted ", dist8counter, " of ", perms, " possibilities using the 1/8 constraint. That's ", 100*dist8counter/(perms), "%")
+print("We discounted ", dist4counter, " of ", perms, " possibilities using the 1/4 constraint. That's ", 100*dist4counter/(perms), "%")
+print("We discounted ", revdist4counter, " of ", perms, " possibilities with the reverse constraint. That's ", 100*revdist4counter/(perms), "%")
+print("We discounted ", boundarycounter, " of ", perms, " possibilities with the boundary constraint. That's ", 100*boundarycounter/(perms), "%")
+print("We discounted ", allcounter, " of ", perms, " possibilities combining the boundary, pentagon, vertical, 1/4 and reverse constraints. That's ", 100*allcounter/(perms), "%")
 
-print("\nThe improvement by considering the pentagon over the triangle was", 100*(pentinteriorcounter/(perms*(n-3)))/(interiorcounter/(combs*(n-3))) -100, "%")
+
+# print("\nThe improvement by considering the pentagon over the triangle was", 100*(pentinteriorcounter/(perms*(n-3)))/(interiorcounter/(combs*(n-3))) -100, "%")
 
 xs = [point[0] for point in pointlist] # this part is for plotting the points 
 ys = [point[1] for point in pointlist]
