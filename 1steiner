@@ -1,0 +1,500 @@
+import math
+import random
+import time
+from itertools import combinations
+
+import matplotlib.pyplot as plt
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon, LinearRing
+
+class Graph:
+    def __init__(self, vertex):
+        self.V = vertex
+        self.graph = []
+
+    def add_edge(self, u, v, w):
+        self.graph.append([u, v, w])
+
+    def search(self, parent, i):
+        if parent[i] == i:
+            return i
+        return self.search(parent, parent[i])
+
+    def apply_union(self, parent, rank, x, y):
+        xroot = self.search(parent, x)
+        yroot = self.search(parent, y)
+        if rank[xroot] < rank[yroot]:
+            parent[xroot] = yroot
+        elif rank[xroot] > rank[yroot]:
+            parent[yroot] = xroot
+        else:
+            parent[yroot] = xroot
+            rank[xroot] += 1
+
+    def kruskal(self):
+        result = []
+        i, e = 0, 0
+        self.graph = sorted(self.graph, key=lambda item: item[2])
+        parent = []
+        rank = []
+        for node in range(self.V):
+            parent.append(node)
+            rank.append(0)
+        while e < self.V - 1:
+            u, v, w = self.graph[i]
+            i = i + 1
+            x = self.search(parent, u)
+            y = self.search(parent, v)
+            if x != y:
+                e = e + 1
+                result.append([u, v, w])
+                self.apply_union(parent, rank, x, y)
+        return result
+
+
+def findangle(p1,p2):  # finds angle in degrees of p2 from p1, 0 degrees is parallel to the x-axis, to the right
+    rise = p2[1] - p1[1]
+    run = p2[0] - p1[0]
+    if run == 0:
+        if rise == 0:
+            return
+        if rise > 0:
+            return 90
+        if rise < 0:
+            return 270
+    else:
+        return math.degrees(math.atan2(rise,run))
+
+
+def rotatedpoint(p1, p2, angle):  # rotates p2 around p1 by given angle
+    qx = p1[0] + math.cos(math.radians(angle)) * (p2[0] - p1[0]) - math.sin(math.radians(angle)) * (p2[1] - p1[1])
+    qy = p1[1] + math.sin(math.radians(angle)) * (p2[0] - p1[0]) + math.cos(math.radians(angle)) * (p2[1] - p1[1])
+    return [qx, qy]
+
+
+def pointdistance(p1, p2):
+    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
+
+def equipoint2(p1, p2):
+    newpoint = rotatedpoint(p1, p2, 60)
+    angle1 = findangle(newpoint, p1)
+    angle2 = findangle(newpoint, p2)
+    if angle1 < -120 and angle2 > 120:
+        angle1 = angle1 + 360
+    if angle2 < -120 and angle1 > 120:
+        angle2 = angle2 + 360
+    return [newpoint[0], newpoint[1], [p1, p2], min(angle1, angle2), max(angle1, angle2)]
+
+
+def equipoint3(p1, p2, p3):
+    a = pointdistance(p1, p2)
+    b = pointdistance(p1, p3)
+    c = pointdistance(p3, p2)
+    biggest = max(a, b, c)
+    if biggest == a:
+        angle1 = findangle(p3, p1)
+        angle2 = findangle(p3, p2)
+        if angle1 < -120 and angle2 > 120:
+            angle1 = angle1 + 360
+        if angle2 < -120 and angle1 > 120:
+            angle2 = angle2 + 360
+        return [p3[0], p3[1], [p3, p1, p2], min(angle1, angle2), max(angle1, angle2)]
+    if biggest == b:
+        angle1 = findangle(p2, p1)
+        angle2 = findangle(p2, p3)
+        if angle1 < -120 and angle2 > 120:
+            angle1 = angle1 + 360
+        if angle2 < -120 and angle1 > 120:
+            angle2 = angle2 + 360
+        return [p2[0], p2[1], [p2, p1, p3], min(angle1, angle2), max(angle1, angle2)]
+    if biggest == c:
+        angle1 = findangle(p1, p2)
+        angle2 = findangle(p1, p3)
+        if angle1 < -120 and angle2 > 120:
+            angle1 = angle1 + 360
+        if angle2 < -120 and angle1 > 120:
+            angle2 = angle2 + 360
+        return [p1[0], p1[1], [p1, p2, p3], min(angle1, angle2), max(angle1, angle2)]
+
+
+def getAngle(a, b, c):  # finds angle between these three points at b
+    ang = math.degrees(math.atan2(c[1] - b[1], c[0] - b[0]) - math.atan2(a[1] - b[1], a[0] - b[0]))
+    if ang < 0:
+        return ang + 360
+    else:
+        return ang
+
+
+def findIntersection(A, B, C, D):
+    px = ((A[0] * B[1] - A[1] * B[0]) * (C[0] - D[0]) - (A[0] - B[0]) * (C[0] * D[1] - C[1] * D[0])) / (
+                (A[0] - B[0]) * (C[1] - D[1]) - (A[1] - B[1]) * (C[0] - D[0]))
+    py = ((A[0] * B[1] - A[1] * B[0]) * (C[1] - D[1]) - (A[1] - B[1]) * (C[0] * D[1] - C[1] * D[0])) / (
+                (A[0] - B[0]) * (C[1] - D[1]) - (A[1] - B[1]) * (C[0] - D[0]))
+    return [px, py]
+
+
+def steiner(A, B, C):
+    a = getAngle(B, A, C)
+    b = getAngle(C, B, A)
+    c = getAngle(A, C, B)
+    if 120 <= a <= 240:
+        return A
+    elif 120 <= b <= 240:
+        return B
+    elif 120 <= c <= 240:
+        return C
+    else:
+        if LinearRing([A, B, C]).is_ccw:
+            return findIntersection(C, rotatedpoint(B, A, 60), B, rotatedpoint(A, C, 60))
+        else:
+            return findIntersection(B, rotatedpoint(C, A, 60), C, rotatedpoint(A, B, 60))
+
+def distconstraint(p1, p2, p3):  # Marcus conjecture where n=1/(2*sqrt(3) . Formula straight from wiki page on point to a line with small modifications. p3 is the point we are checking the distance from the interval p1-p2
+    return abs((p2[0] - p1[0]) * (p1[1] - p3[1]) - (p1[0] - p3[0]) * (p2[1] - p1[1])) <= (1 / (2 * math.sqrt(3))) * (
+                (p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
+
+
+def reversedist(p1, p2, p3):  # p3 is the point we are checking distance from interval p1-p2
+    m = 1 / (2 * math.sqrt(3))
+    return (((1 - 2 * m ** 2) / (2 * m)) * ((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2) < abs(
+        (p2[0] - p1[0]) * (p1[1] - p3[1]) - (p1[0] - p3[0]) * (p2[1] - p1[1])))
+
+
+def luneconstraint(p1, p2, p3):  # returns true if p3 is inside the lune of p1 and p2
+    return (pointdistance(p3, p2) <= pointdistance(p1, p2)) and (pointdistance(p3, p1) <= pointdistance(p1, p2))
+
+
+def quadconstraint(p1, p2, p3):  # returns true if p3 is inside the quad of p1 and p2
+    quad = Polygon([p1, rotatedpoint(p1, p2, 60), p2, rotatedpoint(p2, p1, 60)])
+    return quad.contains(Point(p3))
+
+
+def verticalconstraint(p1, p2, p3, p4):  # check if p3,p4 is in Jae's vertical constraint made by p1,p2.
+    if p1[1] == p2[1]:
+        return (min(p1[0], p2[0]) <= p3[0] <= max(p1[0], p2[0])) and (min(p1[0], p2[0]) <= p4[0] <= max(p1[0], p2[0]))
+    else:
+        m = -(p1[0] - p2[0]) / (p1[1] - p2[1])
+        return (min(p1[1] - m * p1[0], p2[1] - m * p2[0]) <= p3[1] - m * p3[0] <= max(p1[1] - m * p1[0],
+                                                                                      p2[1] - m * p2[0])) and (
+                           min(p1[1] - m * p1[0], p2[1] - m * p2[0]) <= p4[1] - m * p4[0] <= max(p1[1] - m * p1[0],
+                                                                                                 p2[1] - m * p2[0]))
+
+
+def FindTerminals(list1):
+    terminallist = []
+    for i in list1:
+        if not any(isinstance(j, list) for j in i):
+            terminallist.append(i)
+        else:
+            terminallist.extend(FindTerminals(i))
+    return terminallist
+
+def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter):
+    # for q in range(n):  # randomly generates points, of form (x,y,<lowest allowed angle>,<highest allowed angle>)
+    #     newpoint = [random.random(), random.random(), [], -180, 180]
+    #     terminals.append(newpoint)
+
+    branch_set = []  # general data structure for branches: list with [location,topology,angles]
+    branch_set.extend(terminals)
+
+    # tri = Delaunay([(points[0], points[1]) for points in terminals])  # finding Delaunay triangulation
+
+    # edge_set = []
+    # for simplex in tri.simplices:
+    #     edge_set.append([simplex[0], simplex[1]])
+    #     edge_set.append([simplex[1], simplex[2]])
+    #     edge_set.append([simplex[2], simplex[0]])
+    #
+    # for i in edge_set:
+    #     i.sort()
+    # cleanlist = []
+    # [cleanlist.append(x) for x in edge_set if x not in cleanlist]
+
+    g = Graph(n)
+
+    for i in range(n):
+        for j in range(i, n):
+            g.add_edge(i, j, pointdistance(terminals[i], terminals[j]))
+
+    cleanlist = g.kruskal()
+
+    fst_set = [[0, pointdistance(terminals[i], terminals[j]), [terminals[i][:2], terminals[j][:2]]] for [i, j, w] in
+               cleanlist]  # first element of list is number of steiner points, second is length
+
+    for combo in combinations(terminals, 2):
+        branch_set.extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
+
+    for combo in combinations(terminals, 3):
+        polygon = Polygon([point[:2] for point in combo])
+        polygonempty = True
+        for j in terminals:
+            if polygon.contains(Point(j)):
+                polygonempty = False
+                break
+        if polygonempty:
+            if (not distconstraint(combo[0], combo[1], combo[2]) or not distconstraint(combo[1], combo[0], combo[
+                2])) or not distconstraint(combo[2], combo[1], combo[0]):
+                if (not reversedist(combo[0], combo[1], combo[2]) or not reversedist(combo[1], combo[0],
+                                                                                     combo[2])) or not reversedist(
+                    combo[2], combo[1], combo[0]):
+                    branch_set.append(equipoint3(combo[0], combo[1], combo[2]))
+
+    for branch_pair in combinations(branch_set, 2):
+        if len(branch_pair[0][2]) + len(branch_pair[1][2]) == 2:
+            if len(branch_pair[0][2]) == 0:
+                s = findangle(branch_pair[1][:2], branch_pair[0][:2])
+
+                a = branch_pair[0][:2]
+                b = branch_pair[1][2][0][:2]
+                c = branch_pair[1][2][1][:2]
+                steiner_point = steiner(a, b, c)
+                if steiner_point == steinerbroken:
+                    print("WE GOT HERE i1")
+                    print(branch_pair[1][3], s, s % 360, branch_pair[1][4])
+                if branch_pair[1][3] < s % 360 < branch_pair[1][4]:  # if the point is in the cone
+                    steiner_point = steiner(a, b, c)
+                    if steiner_point == steinerbroken:
+                        print("WE GOT HERE i2")
+                    if steiner_point not in [a, b, c]:
+                        lunesempty = True
+                        for j in terminals:  # check lune constraint using proposed edges
+                            if ((luneconstraint(a, steiner_point, j) or luneconstraint(b, steiner_point,
+                                                                                       j)) or luneconstraint(c,
+                                                                                                             steiner_point,
+                                                                                                             j)) and j[
+                                                                                                                     :2] not in [
+                                a, b, c]:
+                                lunesempty = False
+                                break
+                        if lunesempty:
+                            fst_set.append([1, pointdistance(a, steiner_point) + pointdistance(b,
+                                                                                               steiner_point) + pointdistance(
+                                c, steiner_point),
+                                            [[a, steiner_point], [b, steiner_point], [c, steiner_point]]])
+            else:
+                s = findangle(branch_pair[0][:2], branch_pair[1][:2])
+
+                a = branch_pair[1][:2]
+                b = branch_pair[0][2][0][:2]
+                c = branch_pair[0][2][1][:2]
+                steiner_point = steiner(a, b, c)
+                if steiner_point == steinerbroken:
+                    print("WE GOT HERE e1")
+                if branch_pair[0][3] < s % 360 < branch_pair[0][4]:  # if the point is in the cone
+                    steiner_point = steiner(a, b, c)
+                    if steiner_point == steinerbroken:
+                        print("WE GOT HERE e2")
+                    if steiner_point not in [a, b, c]:
+                        lunesempty = True
+                        for j in terminals:  # check lune constraint using proposed edges
+                            if ((luneconstraint(a, steiner_point, j) or luneconstraint(b, steiner_point,
+                                                                                       j)) or luneconstraint(c,
+                                                                                                             steiner_point,
+                                                                                                             j)) and j[
+                                                                                                                     :2] not in [
+                                a, b, c]:
+                                lunesempty = False
+                                break
+                        if lunesempty:
+                            fst_set.append([1, pointdistance(a, steiner_point) + pointdistance(b,
+                                                                                               steiner_point) + pointdistance(
+                                c, steiner_point),
+                                            [[a, steiner_point], [b, steiner_point], [c, steiner_point]]])
+        if len(branch_pair[0][2]) + len(branch_pair[1][2]) == 3 and branch_pair[0][:2] != branch_pair[1][:2]:
+            if len(branch_pair[0][2]) == 0:
+                s = findangle(branch_pair[1][:2], branch_pair[0][:2])
+
+                a = branch_pair[1][2][0][:2]
+                b = branch_pair[0][:2]
+                c = branch_pair[1][2][1][:2]
+                d = branch_pair[1][2][2][:2]
+                if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
+                    if (((branch_pair[1][3] < s % 360 < branch_pair[1][4]) and not distconstraint(c, d,
+                                                                                                  b)) and not reversedist(
+                        c, d, b)) and luneconstraint(c, d,
+                                                     b):  # if the point is in the cone, lune and distance constraints
+                        if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c, d,
+                                                                                                     a)) and quadconstraint(
+                            c, d, b):
+                            cross_point = findIntersection(a, b, c, d)
+                            lunesempty = True
+                            for j in terminals:  # check lune constraint using proposed edges
+                                if (((luneconstraint(a, cross_point, j) or luneconstraint(b, cross_point,
+                                                                                          j)) or luneconstraint(c,
+                                                                                                                cross_point,
+                                                                                                                j)) or luneconstraint(
+                                    d, cross_point, j)) and j[:2] not in [a, b, c, d]:
+                                    lunesempty = False
+                                    break
+                            if lunesempty:
+                                fst_set.append([1, pointdistance(a, b) + pointdistance(c, d),
+                                                [[b, cross_point], [a, cross_point], [c, cross_point],
+                                                 [d, cross_point]]])
+            else:
+                s = findangle(branch_pair[0][:2], branch_pair[1][:2])
+
+                a = branch_pair[0][2][0][:2]
+                b = branch_pair[1][:2]
+                c = branch_pair[0][2][1][:2]
+                d = branch_pair[0][2][2][:2]
+                if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
+                    if (((branch_pair[0][3] < s % 360 < branch_pair[0][4]) and not distconstraint(c, d,
+                                                                                                  b)) and not reversedist(
+                        c, d, b)) and luneconstraint(c, d,
+                                                     b):  # if the point is in the cone, lune and distance constraints
+                        if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c, d,
+                                                                                                     a)) and quadconstraint(
+                            c, d, b):
+                            cross_point = findIntersection(a, b, c, d)
+                            lunesempty = True
+                            for j in terminals:  # check lune constraint using proposed edges
+                                if (((luneconstraint(a, cross_point, j) or luneconstraint(b, cross_point,
+                                                                                          j)) or luneconstraint(c,
+                                                                                                                cross_point,
+                                                                                                                j)) or luneconstraint(
+                                    d, cross_point, j)) and j[:2] not in [a, b, c, d]:
+                                    lunesempty = False
+                                    break
+                            if lunesempty:
+                                fst_set.append([1, pointdistance(a, b) + pointdistance(c, d),
+                                                [[b, cross_point], [a, cross_point], [c, cross_point],
+                                                 [d, cross_point]]])
+    # print("--- %s seconds ---" % (time.time() - start_time))
+
+    # print(fst_set)
+
+    for i in fst_set:
+        listofterminals = FindTerminals(i[2])
+        terminalsbyindex = []
+        for point in listofterminals:
+            x = point + [[], -180, 180]
+            if x in terminals:
+                terminalsbyindex.append(terminals.index(x))
+        terminalsbyindex.sort()
+        i.insert(2, terminalsbyindex)
+
+    d = {}  # removing fst's if there exists an fst on the same terminals with same or smaller length.
+    for sub in fst_set:
+        k = tuple(sub[2])
+        if k not in d or sub[1] < d[k][1]:
+            d[k] = sub
+
+    fst_set = list(d.values())
+
+    jae_set = [[i[0] for i in fst_set], [i[1] for i in fst_set], [i[2] for i in fst_set], [i[3] for i in fst_set]]
+    jae_counts = [len(x) for x in jae_set]
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+
+    output = [test_inputs[0], [point[:2] for point in terminals]]
+    output.extend(jae_set)
+    output.extend(jae_counts)
+    with open('steineroutput%s.txt' % timestr, 'w+') as file:
+        file.writelines([str(line) + "\n" for line in output])
+
+    num_edges = sum(1 for x in fst_set if len(x[2]) == 2)
+    num_3steiner = sum(1 for x in fst_set if len(x[2]) == 3)
+    num_4steiner = sum(1 for x in fst_set if len(x[2]) == 4)
+
+    edge_counter += num_edges
+    trip_counter += num_3steiner
+    quad_counter += num_4steiner
+
+    # print("The number of terminals was ", test_inputs[0], ". The number of FST's is ", len(fst_set), ". That's ",
+    #       num_edges,
+    #       " edges, ", num_3steiner, " triples, and ", num_4steiner, " quads.")
+
+    times.append((time.time() - start_time) / r)
+    edge_counts.append(edge_counter / r)
+    triple_counts.append(trip_counter / r)
+    quad_counts.append(quad_counter / r)
+
+    return terminals, jae_set, times, edge_counts, triple_counts, quad_counts
+
+
+
+test_inputs = [20] # range(6,51)
+r = 1  # number of repeats
+
+times = []
+edge_counts = []
+triple_counts = []
+quad_counts = []
+
+start_time = time.time()
+edge_counter = 0
+trip_counter = 0
+quad_counter = 0
+k = 1  # k in k-Steiner problem
+# while quad_counter < 1:
+for i in range(r):
+
+    points = [[0.18446498436120895, 0.6184426848049662], [0.7422285780739769, 0.4993487191609768],
+              [0.8631455231645835, 0.8251268093724332], [0.4009380102563229, 0.8031461010876775],
+              [0.3931722104028642, 0.6783502187212731], [0.09824893476050789, 0.02079242235759937],
+              [0.17177485489259603, 0.5990570312466027], [0.3571847013273092, 0.5702472179180343],
+              [0.2935916581970842, 0.2128390336353453], [0.6649727404964251, 0.2522138247316027],
+              [0.12693630191404293, 0.014546964812771623], [0.3279846173715646, 0.1914429925815503],
+              [0.31873332929656384, 0.5821469962211879], [0.9925885968561867, 0.17811223908656748],
+              [0.24454926199187177, 0.960735795925137], [0.14048726318876914, 0.1670286943044541],
+              [0.4509017304684252, 0.912374171306085], [0.6762776926548817, 0.7129924894912819],
+              [0.9574198952205123, 0.5984408485300361], [0.3874651302791111, 0.0026287991797877552]]
+    print(len(points))
+
+    steinerbroken = [0.7031368936365537, 0.688286278162037]
+
+    terminals = [point + [[], -180, 180] for point in points]
+
+    for n in test_inputs:
+        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter)
+
+
+if r == 1 and len(test_inputs) == 1:
+    fig, ax = plt.subplots()
+
+    xs = [point[0] for point in terminals]  # this part is for plotting the points
+    ys = [point[1] for point in terminals]
+    plt.scatter(xs, ys)
+
+    for i in range(len(terminals)):
+        ax.annotate(i, (xs[i], ys[i]))
+
+    for tops in jae_set[3]:
+        if len(tops) == 2:
+            x = [tops[0][0], tops[1][0]]
+            y = [tops[0][1], tops[1][1]]
+            plt.plot(x, y, 'k')
+        else:
+            for edge in tops:
+                x = [edge[0][0], edge[1][0]]
+                y = [edge[0][1], edge[1][1]]
+                if len(tops) == 3:
+                    plt.plot(x, y, 'g')
+                else:
+                    plt.plot(x, y, 'r')
+
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
+    ax.set_aspect('equal')
+    plt.show()
+
+if r > 1 and len(test_inputs) > 1:
+    w = test_inputs
+    x = edge_counts
+    y = triple_counts
+    z = quad_counts
+    plt.plot(w, x, label = "# of edges")
+    plt.plot(w, y, label = "# of triples")
+    plt.plot(w, z, label = "# of crosses")
+    plt.xlabel('# of terminals')
+    plt.ylabel('Count')
+    plt.legend()
+    plt.show()
+
+
+    x = test_inputs
+    y = times
+    plt.plot(x, y)
+    plt.xlabel('# of terminals')
+    plt.ylabel('Time in sec')
+    plt.show()
