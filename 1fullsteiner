@@ -9,6 +9,9 @@ from itertools import combinations
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon, LinearRing
 
+def find(lst, a):
+    return [i for i, x in enumerate(lst) if x == a]
+
 class Graph:
     def __init__(self, vertex):
         self.V = vertex
@@ -53,8 +56,6 @@ class Graph:
                 self.apply_union(parent, rank, x, y)
         return result
 
-def find(lst, a):
-    return [i for i, x in enumerate(lst) if x == a]
 
 def findangle(p1,p2):  # finds angle in degrees of p2 from p1, 0 degrees is parallel to the x-axis, to the right
     rise = p2[1] - p1[1]
@@ -82,13 +83,7 @@ def pointdistance(p1, p2):
 
 def equipoint2(p1, p2):
     newpoint = rotatedpoint(p1, p2, 60)
-    angle1 = findangle(newpoint, p1)
-    angle2 = findangle(newpoint, p2)
-    if angle1 < -120 and angle2 > 120:
-        angle1 = angle1 + 360
-    if angle2 < -120 and angle1 > 120:
-        angle2 = angle2 + 360
-    return [newpoint[0], newpoint[1], [p1, p2], min(angle1, angle2), max(angle1, angle2)]
+    return [newpoint[0], newpoint[1], [p1, p2], p1[:2], p2[:2],"arc"]
 
 
 def equipoint3(p1, p2, p3):
@@ -103,7 +98,7 @@ def equipoint3(p1, p2, p3):
             angle1 = angle1 + 360
         if angle2 < -120 and angle1 > 120:
             angle2 = angle2 + 360
-        return [p3[0], p3[1], [p3, p1, p2], min(angle1, angle2), max(angle1, angle2)]
+        return [p3[0], p3[1], [p3, p1, p2], p1[:2], p2[:2], "line"]
     if biggest == b:
         angle1 = findangle(p2, p1)
         angle2 = findangle(p2, p3)
@@ -111,7 +106,7 @@ def equipoint3(p1, p2, p3):
             angle1 = angle1 + 360
         if angle2 < -120 and angle1 > 120:
             angle2 = angle2 + 360
-        return [p2[0], p2[1], [p2, p1, p3], min(angle1, angle2), max(angle1, angle2)]
+        return [p2[0], p2[1], [p2, p1, p3], p1[:2], p3[:2],"line"]
     if biggest == c:
         angle1 = findangle(p1, p2)
         angle2 = findangle(p1, p3)
@@ -119,7 +114,7 @@ def equipoint3(p1, p2, p3):
             angle1 = angle1 + 360
         if angle2 < -120 and angle1 > 120:
             angle2 = angle2 + 360
-        return [p1[0], p1[1], [p1, p2, p3], min(angle1, angle2), max(angle1, angle2)]
+        return [p1[0], p1[1], [p1, p2, p3], p2[:2], p3[:2],"line"]
 
 
 def getAngle(a, b, c):  # finds angle between these three points at b
@@ -194,11 +189,14 @@ def FindTerminals(list1):
             terminallist.extend(FindTerminals(i))
     return terminallist
 
-def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter):
-    # for q in range(n):  # randomly generates points, of form (x,y,<lowest allowed angle>,<highest allowed angle>)
-    #     newpoint = [random.random(), random.random(), [], -180, 180]
-    #     terminals.append(newpoint)
+def IsPointInCone(eqpoint1,eqpoint2): #checks if eqpoint2 is in cone of eqpoint1
+    if eqpoint1[3] == eqpoint1[4] == [-1,1]: #dummy locations for order-0 pseudoterminals
+        return True
+    else:
+        s = findangle(eqpoint1[:2], eqpoint2[:2])
+        return findangle(eqpoint1[:2],eqpoint1[3]) < s % 360 < findangle(eqpoint1[:2],eqpoint1[4])
 
+def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter):
     branch_set = []  # general data structure for branches: list with [location,topology,angles]
     branch_set.extend(terminals)
 
@@ -212,7 +210,6 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
 
     fst_set = [[0, pointdistance(terminals[i], terminals[j]), [terminals[i][:2], terminals[j][:2]]] for [i, j, w] in
                cleanlist]  # first element of list is number of steiner points, second is length
-
     for combo in combinations(terminals, 2):
         branch_set.extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
 
@@ -234,12 +231,10 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     for branch_pair in combinations(branch_set, 2):
         if len(branch_pair[0][2]) + len(branch_pair[1][2]) == 2:
             if len(branch_pair[0][2]) == 0:
-                s = findangle(branch_pair[1][:2], branch_pair[0][:2])
-
                 a = branch_pair[0][:2]
                 b = branch_pair[1][2][0][:2]
                 c = branch_pair[1][2][1][:2]
-                if branch_pair[1][3] < s % 360 < branch_pair[1][4]:  # if the point is in the cone
+                if IsPointInCone(branch_pair[1],branch_pair[0]):  # if the point is in the cone
                     steiner_point = steiner(a, b, c)
                     if steiner_point not in [a, b, c]:
                         lunesempty = True
@@ -258,13 +253,10 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                 c, steiner_point),
                                             [[a, steiner_point], [b, steiner_point], [c, steiner_point]]])
             else:
-                s = findangle(branch_pair[0][:2], branch_pair[1][:2])
-
                 a = branch_pair[1][:2]
                 b = branch_pair[0][2][0][:2]
                 c = branch_pair[0][2][1][:2]
-                steiner_point = steiner(a, b, c)
-                if branch_pair[0][3] < s % 360 < branch_pair[0][4]:  # if the point is in the cone
+                if IsPointInCone(branch_pair[0],branch_pair[1]):  # if the point is in the cone
                     steiner_point = steiner(a, b, c)
                     if steiner_point not in [a, b, c]:
                         lunesempty = True
@@ -284,14 +276,12 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                             [[a, steiner_point], [b, steiner_point], [c, steiner_point]]])
         if len(branch_pair[0][2]) + len(branch_pair[1][2]) == 3 and branch_pair[0][:2] != branch_pair[1][:2]:
             if len(branch_pair[0][2]) == 0:
-                s = findangle(branch_pair[1][:2], branch_pair[0][:2])
-
                 a = branch_pair[1][2][0][:2]
                 b = branch_pair[0][:2]
                 c = branch_pair[1][2][1][:2]
                 d = branch_pair[1][2][2][:2]
                 if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
-                    if (((branch_pair[1][3] < s % 360 < branch_pair[1][4]) and not distconstraint(c, d,
+                    if ((IsPointInCone(branch_pair[1],branch_pair[0]) and not distconstraint(c, d,
                                                                                                   b)) and not reversedist(
                         c, d, b)) and luneconstraint(c, d,
                                                      b):  # if the point is in the cone, lune and distance constraints
@@ -313,14 +303,12 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                                 [[b, cross_point], [a, cross_point], [c, cross_point],
                                                  [d, cross_point]]])
             else:
-                s = findangle(branch_pair[0][:2], branch_pair[1][:2])
-
                 a = branch_pair[0][2][0][:2]
                 b = branch_pair[1][:2]
                 c = branch_pair[0][2][1][:2]
                 d = branch_pair[0][2][2][:2]
                 if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
-                    if (((branch_pair[0][3] < s % 360 < branch_pair[0][4]) and not distconstraint(c, d,
+                    if (((IsPointInCone(branch_pair[0],branch_pair[1])) and not distconstraint(c, d,
                                                                                                   b)) and not reversedist(
                         c, d, b)) and luneconstraint(c, d,
                                                      b):  # if the point is in the cone, lune and distance constraints
@@ -341,14 +329,13 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                 fst_set.append([1, pointdistance(a, b) + pointdistance(c, d),
                                                 [[b, cross_point], [a, cross_point], [c, cross_point],
                                                  [d, cross_point]]])
-
-    # print(fst_set)
+    # print("--- %s seconds ---" % (time.time() - start_time))
 
     for i in fst_set:
         listofterminals = FindTerminals(i[2])
         terminalsbyindex = []
         for point in listofterminals:
-            x = point + [[], -180, 180]
+            x = point + [[], [-1,-1],[-1,-1],"line"]
             if x in terminals:
                 terminalsbyindex.append(terminals.index(x))
         terminalsbyindex.sort()
@@ -380,13 +367,16 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     trip_counter += num_3steiner
     quad_counter += num_4steiner
 
+    # print("The number of terminals was ", test_inputs[0], ". The number of FST's is ", len(fst_set), ". That's ",
+    #       num_edges,
+    #       " edges, ", num_3steiner, " triples, and ", num_4steiner, " quads.")
+
     times.append((time.time() - start_time) / r)
     edge_counts.append(edge_counter / r)
     triple_counts.append(trip_counter / r)
     quad_counts.append(quad_counter / r)
 
     return terminals, jae_set, times, edge_counts, triple_counts, quad_counts
-
 
 
 test_inputs = [20] # range(6,51)
@@ -407,7 +397,7 @@ for i in range(r):
     for n in test_inputs:
         terminals = []
         for q in range(n):  # randomly generates points, of form (x,y,<lowest allowed angle>,<highest allowed angle>)
-            newpoint = [random.random(), random.random(), [], -180, 180]
+            newpoint = [random.random(), random.random(), [], [-1,-1],[-1,-1],"line"]
             terminals.append(newpoint)
 
         terminals, jae_set, times, edge_counts, triple_counts, quad_counts = OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter)
