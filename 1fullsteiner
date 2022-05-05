@@ -163,6 +163,13 @@ def reversedist(p1, p2, p3):  # p3 is the point we are checking distance from in
 def luneconstraint(p1, p2, p3):  # returns true if p3 is inside the lune of p1 and p2
     return (pointdistance(p3, p2) <= pointdistance(p1, p2)) and (pointdistance(p3, p1) <= pointdistance(p1, p2))
 
+def bottleconstraint(list1,stein,terms,bottle):
+    for point in list1:
+        x = pointdistance(point,stein)
+        for second_point in list1[(list1.index(point)+1):]:
+            if x > bottle[terms.index(point)][terms.index(second_point)]:
+                return False
+    return True
 
 def quadconstraint(p1, p2, p3):  # returns true if p3 is inside the quad of p1 and p2
     quad = Polygon([p1, rotatedpoint(p1, p2, 60), p2, rotatedpoint(p2, p1, 60)])
@@ -200,6 +207,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     branch_set = []  # general data structure for branches: list with [location,topology,angles]
     branch_set.extend(terminals)
 
+    terminals_short = [x[:2] for x in terminals]
+
     g = Graph(n)
 
     for i in range(n):
@@ -207,6 +216,26 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
             g.add_edge(i, j, pointdistance(terminals[i], terminals[j]))
 
     cleanlist = g.kruskal()
+
+    bottleneck = [[0] * n for i in range(n)]
+    components = [[x] for x in range(n)]
+
+    ordered_cleanlist = sorted(cleanlist, key=lambda edge: edge[2])
+
+    for edge in ordered_cleanlist:
+        for part in components:
+            if edge[0] in part:
+                comp1 = part
+            if edge[1] in part:
+                comp2 = part
+        for i in comp1:
+            for j in comp2:
+                bottleneck[i][j] = edge[2]
+                bottleneck[j][i] = edge[2]
+        newcomp = comp1 + comp2
+        components.remove(comp1)
+        components.remove(comp2)
+        components.append(newcomp)
 
     fst_set = [[0, pointdistance(terminals[i], terminals[j]), [terminals[i][:2], terminals[j][:2]]] for [i, j, w] in
                cleanlist]  # first element of list is number of steiner points, second is length
@@ -234,8 +263,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                 a = branch_pair[0][:2]
                 b = branch_pair[1][2][0][:2]
                 c = branch_pair[1][2][1][:2]
-                if IsPointInCone(branch_pair[1],branch_pair[0]):  # if the point is in the cone
-                    steiner_point = steiner(a, b, c)
+                steiner_point = steiner(a, b, c)
+                if IsPointInCone(branch_pair[1],branch_pair[0]) and bottleconstraint([a,b,c],steiner_point,terminals_short,bottleneck):  # if the point is in the cone
                     if steiner_point not in [a, b, c]:
                         lunesempty = True
                         for j in terminals:  # check lune constraint using proposed edges
@@ -256,8 +285,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                 a = branch_pair[1][:2]
                 b = branch_pair[0][2][0][:2]
                 c = branch_pair[0][2][1][:2]
-                if IsPointInCone(branch_pair[0],branch_pair[1]):  # if the point is in the cone
-                    steiner_point = steiner(a, b, c)
+                steiner_point = steiner(a, b, c)
+                if IsPointInCone(branch_pair[0],branch_pair[1]) and bottleconstraint([a,b,c],steiner_point,terminals_short,bottleneck):  # if the point is in the cone
                     if steiner_point not in [a, b, c]:
                         lunesempty = True
                         for j in terminals:  # check lune constraint using proposed edges
@@ -280,7 +309,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                 b = branch_pair[0][:2]
                 c = branch_pair[1][2][1][:2]
                 d = branch_pair[1][2][2][:2]
-                if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
+                cross_point = findIntersection(a, b, c, d)
+                if (verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b)) and bottleconstraint([a,b,c,d],cross_point,terminals_short,bottleneck):
                     if ((IsPointInCone(branch_pair[1],branch_pair[0]) and not distconstraint(c, d,
                                                                                                   b)) and not reversedist(
                         c, d, b)) and luneconstraint(c, d,
@@ -288,7 +318,6 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                         if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c, d,
                                                                                                      a)) and quadconstraint(
                             c, d, b):
-                            cross_point = findIntersection(a, b, c, d)
                             lunesempty = True
                             for j in terminals:  # check lune constraint using proposed edges
                                 if (((luneconstraint(a, cross_point, j) or luneconstraint(b, cross_point,
@@ -307,7 +336,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                 b = branch_pair[1][:2]
                 c = branch_pair[0][2][1][:2]
                 d = branch_pair[0][2][2][:2]
-                if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
+                cross_point = findIntersection(a, b, c, d)
+                if (verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b)) and bottleconstraint([a,b,c,d],cross_point,terminals_short,bottleneck):
                     if (((IsPointInCone(branch_pair[0],branch_pair[1])) and not distconstraint(c, d,
                                                                                                   b)) and not reversedist(
                         c, d, b)) and luneconstraint(c, d,
@@ -315,7 +345,6 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                         if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c, d,
                                                                                                      a)) and quadconstraint(
                             c, d, b):
-                            cross_point = findIntersection(a, b, c, d)
                             lunesempty = True
                             for j in terminals:  # check lune constraint using proposed edges
                                 if (((luneconstraint(a, cross_point, j) or luneconstraint(b, cross_point,
@@ -387,7 +416,7 @@ edge_counts = []
 triple_counts = []
 quad_counts = []
 
-start_time = time.time()
+
 edge_counter = 0
 trip_counter = 0
 quad_counter = 0
@@ -395,6 +424,7 @@ k = 1  # k in k-Steiner problem
 # while quad_counter < 1:
 for i in range(r):
     for n in test_inputs:
+        start_time = time.time()
         terminals = []
         for q in range(n):  # randomly generates points, of form (x,y,<lowest allowed angle>,<highest allowed angle>)
             newpoint = [random.random(), random.random(), [], [-1,-1],[-1,-1],"line"]
@@ -524,6 +554,8 @@ for i in range(r):
         htree = find(xvalues, 1)
         print(htree)
         print(iter)
+
+        print("--- %s seconds ---" % (time.time() - start_time))
 
         def count(l):
             return sum(1 + count(i) for i in l if isinstance(i,list))
