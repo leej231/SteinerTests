@@ -83,49 +83,20 @@ def pointdistance(p1, p2):
 
 def equipoint2(p1, p2):
     newpoint = rotatedpoint(p1, p2, 60)
-    return [newpoint[0], newpoint[1], [p1, p2], p1[:2], p2[:2],"arc"]
+    return [newpoint[0], newpoint[1], [p1, p2], p1[:2], p2[:2],p1[5]+p2[5]+1,p1[6]+p2[6]] # note final addition is a list addition
 
 
 def equipoint3(p1, p2, p3):
-    a = pointdistance(p1, p2)
-    b = pointdistance(p1, p3)
-    c = pointdistance(p3, p2)
-    biggest = max(a, b, c)
-    if biggest == a:
-        angle1 = findangle(p3, p1)
-        angle2 = findangle(p3, p2)
-        if angle1 < -120 and angle2 > 120:
-            angle1 = angle1 + 360
-        if angle2 < -120 and angle1 > 120:
-            angle2 = angle2 + 360
-        return [p3[0], p3[1], [p3, p1, p2], p1[:2], p2[:2], "line"]
-    if biggest == b:
-        angle1 = findangle(p2, p1)
-        angle2 = findangle(p2, p3)
-        if angle1 < -120 and angle2 > 120:
-            angle1 = angle1 + 360
-        if angle2 < -120 and angle1 > 120:
-            angle2 = angle2 + 360
-        return [p2[0], p2[1], [p2, p1, p3], p1[:2], p3[:2],"line"]
-    if biggest == c:
-        angle1 = findangle(p1, p2)
-        angle2 = findangle(p1, p3)
-        if angle1 < -120 and angle2 > 120:
-            angle1 = angle1 + 360
-        if angle2 < -120 and angle1 > 120:
-            angle2 = angle2 + 360
-        return [p1[0], p1[1], [p1, p2, p3], p2[:2], p3[:2],"line"]
+    return [p1[0], p1[1], [p1, p2, p3], p2[:2], p3[:2], p1[5]+p2[5]+p3[5]+1,p1[6]+p2[6]+p3[6]] # note final addition is a list addition
+
 
 
 def getAngle(a, b, c):  # finds angle between these three points at b
     ang = math.degrees(math.atan2(c[1] - b[1], c[0] - b[0]) - math.atan2(a[1] - b[1], a[0] - b[0]))
-    if ang < 0:
-        return ang + 360
-    else:
-        return ang
+    return ang
 
 
-def findIntersection(A, B, C, D):
+def findIntersection(A, B, C, D): #intersection of line through A,B with line through C,D
     px = ((A[0] * B[1] - A[1] * B[0]) * (C[0] - D[0]) - (A[0] - B[0]) * (C[0] * D[1] - C[1] * D[0])) / (
                 (A[0] - B[0]) * (C[1] - D[1]) - (A[1] - B[1]) * (C[0] - D[0]))
     py = ((A[0] * B[1] - A[1] * B[0]) * (C[1] - D[1]) - (A[1] - B[1]) * (C[0] * D[1] - C[1] * D[0])) / (
@@ -164,17 +135,42 @@ def luneconstraint(p1, p2, p3):  # returns true if p3 is inside the lune of p1 a
     return (pointdistance(p3, p2) <= pointdistance(p1, p2)) and (pointdistance(p3, p1) <= pointdistance(p1, p2))
 
 def bottleconstraint(list1,stein,terms,bottle):
+    terms_short = [x[:2] for x in terms]
     for point in list1:
         x = pointdistance(point,stein)
         for second_point in list1[(list1.index(point)+1):]:
-            if x > bottle[terms.index(point)][terms.index(second_point)]:
+            if x > bottle[terms_short.index(point)][terms_short.index(second_point)]:
                 return False
     return True
 
 def quadconstraint(p1, p2, p3):  # returns true if p3 is inside the quad of p1 and p2
-    quad = Polygon([p1, rotatedpoint(p1, p2, 60), p2, rotatedpoint(p2, p1, 60)])
+    quad = Polygon([p1[:2], rotatedpoint(p1, p2, 60), p2[:2], rotatedpoint(p2, p1, 60)])
     return quad.contains(Point(p3))
 
+def same_side(u,v,x,y): #returns true if both u and v are on the same side of x and y
+    if y[0] == x[0]:
+        return ((u[0] <= x[0] and v[0] <= x[0]) or (u[0] >= x[0] and v[0] >= x[0]))
+    else:
+        m = (y[1] - x[1]) / (y[0] - x[0])
+        return ((u[1] - m*u[0] >= x[1] - m*x[0]) and (v[1] - m*v[0] >= x[1] - m*x[0])) or ((u[1] - m*u[0] <= x[1] - m*x[0]) and (v[1] - m*v[0] <= x[1] - m*x[0]))
+
+
+def alpha_ext(u,v,x,y): #iterated version of alpha constraint, simple application. Returns false if both u and v fail the alpha constraint. Requires both u and v to be on the same side of the xy line
+    alpha_con = pointdistance(x,y) * (1/(2*math.sqrt(3)))
+    if same_side(u,v,x,y):
+        if y[0] == x[0]:
+            if u[0] >= x[0]:
+                return not ((u[0] <= x[0] + alpha_con) and (v[0] <= x[0] + alpha_con))
+            else:
+                return not ((u[0] <= x[0] - alpha_con) and (v[0] <= x[0] - alpha_con))
+        else:
+            m = (y[1] - x[1]) / (y[0] - x[0])
+            if u[1] - m*u[0] >= x[1] - m*x[0]:
+                return not ((u[1] - m*u[0] <= x[1] - m*x[0] + alpha_con) and (v[1] - m*v[0] <= x[1] - m*x[0] + alpha_con))
+            else:
+                return not ((u[1] - m * u[0] <= x[1] - m * x[0] - alpha_con) and (v[1] - m * v[0] <= x[1] - m * x[0] - alpha_con))
+    else:
+        return True
 
 def verticalconstraint(p1, p2, p3, p4):  # check if p3,p4 is in Jae's vertical constraint made by p1,p2.
     if p1[1] == p2[1]:
@@ -197,17 +193,174 @@ def FindTerminals(list1):
     return terminallist
 
 def IsPointInCone(eqpoint1,eqpoint2): #checks if eqpoint2 is in cone of eqpoint1
-    if eqpoint1[3] == eqpoint1[4] == [-1,1]: #dummy locations for order-0 pseudoterminals
+    if eqpoint1[3] == eqpoint1[4] == [-1,-1]: #dummy locations for order-0 pseudoterminals
         return True
     else:
-        s = findangle(eqpoint1[:2], eqpoint2[:2])
-        return findangle(eqpoint1[:2],eqpoint1[3]) < s % 360 < findangle(eqpoint1[:2],eqpoint1[4])
+        angletopoint = findangle(eqpoint1[:2], eqpoint2[:2])
+        angletobase1 = findangle(eqpoint1[:2],eqpoint1[3])
+        angletobase2 = findangle(eqpoint1[:2],eqpoint1[4])
+        if angletobase1 <= -120 and angletobase2 >= 120:
+            angletobase1 += 360
+            if angletopoint <= 120:
+                angletopoint += 360
+            return angletobase2 < angletopoint < angletobase1
+        elif angletobase2 <= -120 and angletobase1 >= 120:
+                angletobase2 += 360
+                if angletopoint <= 120:
+                    angletopoint += 360
+                return angletobase1 < angletopoint < angletobase2
+        else:
+            return angletobase1 < angletopoint < angletobase2 or angletobase2 < angletopoint < angletobase1
 
-def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter):
-    branch_set = []  # general data structure for branches: list with [location,topology,angles]
-    branch_set.extend(terminals)
+def ReverseMelzak(point1,point2):
+    edgelist =[]
+    if not MelzCheck(point1,point2):
+        edgelist.append(False)
+    if len(point1[2]) == 0:
+        first = point1[:2]
+    else:
+        if len(point1[2]) == 2:
+            first = steiner(point2[:2],point1[2][0][:2],point1[2][1][:2]) + [[], [-1,-1],[-1,-1],0,[-1]]
+            edgelist.extend(ReverseMelzak(first, point1[2][0]))
+            edgelist.extend(ReverseMelzak(first, point1[2][1]))
+        else:
+            first = findIntersection(point2[:2], point1[2][0][:2], point1[2][1][:2], point1[2][2][:2]) + [[], [-1,-1],[-1,-1],0,[-1]]
+            edgelist.extend(ReverseMelzak(first, point1[2][0]))
+            edgelist.extend(ReverseMelzak(first, point1[2][1]))
+            edgelist.extend(ReverseMelzak(first, point1[2][2]))
+    if len(point2[2]) == 0:
+        second = point2[:2]
+    else:
+        if len(point2[2]) == 2:
+            second = steiner(point1[:2], point2[2][0][:2], point2[2][1][:2]) + [[], [-1, -1], [-1, -1], 0,[-1]]
+            edgelist.extend(ReverseMelzak(second, point2[2][0]))
+            edgelist.extend(ReverseMelzak(second, point2[2][1]))
+        else:
+            second = findIntersection(point1[:2], point2[2][0][:2], point2[2][1][:2], point2[2][2][:2]) + [[], [-1, -1],
+                                                                                                          [-1, -1],
+                                                                                                          0,[-1]]
+            edgelist.extend(ReverseMelzak(second, point2[2][0]))
+            edgelist.extend(ReverseMelzak(second, point2[2][1]))
+            edgelist.extend(ReverseMelzak(second, point2[2][2]))
+    edgelist.append([first[:2],second[:2]])
+    return edgelist
 
-    terminals_short = [x[:2] for x in terminals]
+def NonPseudoPair(point1,point2):
+    if len(point1[2]) == 0:
+        first = point1
+    else:
+        if len(point1[2]) == 2:
+            first = steiner(point2[:2],point1[2][0][:2],point1[2][1][:2]) + [[], [-1,-1],[-1,-1],0,[-1]]
+        else:
+            first = findIntersection(point2[:2], point1[2][0][:2], point1[2][1][:2], point1[2][2][:2]) + [[], [-1,-1],[-1,-1],0,[-1]]
+    if len(point2[2]) == 0:
+        second = point2
+    else:
+        if len(point2[2]) == 2:
+            second = steiner(point1[:2], point2[2][0][:2], point2[2][1][:2]) + [[], [-1, -1], [-1, -1], 0,[-1]]
+        else:
+            second = findIntersection(point1[:2], point2[2][0][:2], point2[2][1][:2], point2[2][2][:2]) + [[], [-1, -1],
+                                                                                                          [-1, -1],
+                                                                                                          0,[-1]]
+    return first,second
+
+def FindCircle(p1,p2,p3): #finds circle given three points on it. Output is centre, radius
+    if p2[0] == p1[0]:
+        m1 = 0
+    else:
+        m1 = (p1[0] - p2[0])/(p2[1] - p1[1]) # negative reciprocal of gradient of line through p1 and p2
+    if p3[0] == p1[0]:
+        m2 = 0
+    else:
+        m2 = (p1[0] - p3[0])/(p3[1] - p1[1]) # negative reciprocal of gradient of line through p1 and p2
+    midpoint1 = [(p1[0]+p2[0])/2,(p1[1]+p2[1])/2]
+    midpoint2 = [(p1[0]+p3[0])/2,(p1[1]+p3[1])/2]
+    centre = findIntersection(midpoint1, [midpoint1[0]+1,midpoint1[1]+m1],midpoint2, [midpoint2[0]+1,midpoint2[1]+m2])
+    radius = pointdistance(centre,p1)
+    return centre,radius
+
+def circle_line_segment_intersection(circle_center, circle_radius, pt1, pt2, full_line=True, tangent_tol=1e-9):
+    """ Find the points at which a circle intersects a line-segment.  This can happen at 0, 1, or 2 points.
+
+    :param circle_center: The (x, y) location of the circle center
+    :param circle_radius: The radius of the circle
+    :param pt1: The (x, y) location of the first point of the segment
+    :param pt2: The (x, y) location of the second point of the segment
+    :param full_line: True to find intersections along full line - not just in the segment.  False will just return intersections within the segment.
+    :param tangent_tol: Numerical tolerance at which we decide the intersections are close enough to consider it a tangent
+    :return Sequence[Tuple[float, float]]: A list of length 0, 1, or 2, where each element is a point at which the circle intercepts a line segment.
+
+    Note: We follow: http://mathworld.wolfram.com/Circle-LineIntersection.html
+    """
+
+    (p1x, p1y), (p2x, p2y), (cx, cy) = pt1, pt2, circle_center
+    (x1, y1), (x2, y2) = (p1x - cx, p1y - cy), (p2x - cx, p2y - cy)
+    dx, dy = (x2 - x1), (y2 - y1)
+    dr = (dx ** 2 + dy ** 2)**.5
+    big_d = x1 * y2 - x2 * y1
+    discriminant = circle_radius ** 2 * dr ** 2 - big_d ** 2
+
+    if discriminant < 0:  # No intersection between circle and line
+        return []
+    else:  # There may be 0, 1, or 2 intersections with the segment
+        intersections = [
+            (cx + (big_d * dy + sign * (-1 if dy < 0 else 1) * dx * discriminant**.5) / dr ** 2,
+             cy + (-big_d * dx + sign * abs(dy) * discriminant**.5) / dr ** 2)
+            for sign in ((1, -1) if dy < 0 else (-1, 1))]  # This makes sure the order along the segment is correct
+        if not full_line:  # If only considering the segment, filter out intersections that do not fall within the segment
+            fraction_along_segment = [(xi - p1x) / dx if abs(dx) > abs(dy) else (yi - p1y) / dy for xi, yi in intersections]
+            intersections = [pt for pt, frac in zip(intersections, fraction_along_segment) if 0 <= frac <= 1]
+        if len(intersections) == 2 and abs(discriminant) <= tangent_tol:  # If line is tangent to circle, return just one point (as both intersections have same location)
+            return [intersections[0]]
+        else:
+            return intersections
+
+def ArcLineInter(point,linepoint1,linepoint2):
+    centre, radius = FindCircle(point[:2],point[3][:2],point[4][:2])
+    intersections = circle_line_segment_intersection(centre,radius,linepoint1[:2],linepoint2[:2])
+    if len(intersections) == 0:
+        return None
+    else:
+        return intersections
+        # Note this might return two points - if you are expecting just one to be on arc, try following code:
+        # basepoint = [centre[0],centre[1],[],point[3],point[4],]
+        # if IsPointInCone(basepoint,intersections[0]):
+        #     return intersections[0]
+        # else:
+        #     return intersections[1]
+
+def rhombus_ext(point,x,y): #returns False if arc does not have any points in the rhombus
+    if point[3] == point[4] == [-1,-1]:
+        return quadconstraint(x,y,point)
+    else:
+        if not quadconstraint(x,y,point[3]) and not quadconstraint(x,y,point[4]):
+            eqpoint1 = equipoint2(x,y)
+            eqpoint2 = equipoint2(y,x)
+            if ArcLineInter(point,x,eqpoint1) == ArcLineInter(point,x,eqpoint2) == ArcLineInter(point,y,eqpoint1) == ArcLineInter(point,x,eqpoint2) == None:
+                return False
+        else:
+            return True
+
+def depth(L):
+    if L == []:
+        return 0
+    else:
+        return isinstance(L, list) and max(map(depth, L))-1
+
+def MelzCheck(point1,point2): #returns false if Melzak will have an error due to Steiner >120 degrees
+    check1 = True
+    check2 = True
+    if len(point1[2]) == 2:
+        a = getAngle(point1[2][0],point2,point1[2][1])
+        check1 = not 120 <= a <= 240
+    if len(point2[2]) == 2:
+        b = getAngle(point2[2][0],point1,point2[2][1])
+        check2 = not 120 <= b <= 240
+    return check1 and check2
+
+def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,kk):
+    branch_set = [[] for x in range(2*kk+3)]  # general data structure for branches: list with [location,topology,angles]
+    branch_set[0].extend(terminals) #index is size of branch minus 1
 
     g = Graph(n)
 
@@ -237,16 +390,16 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
         components.remove(comp2)
         components.append(newcomp)
 
-    fst_set = [[0, pointdistance(terminals[i], terminals[j]), [terminals[i][:2], terminals[j][:2]]] for [i, j, w] in
+    fst_set = [[0, pointdistance(terminals[i], terminals[j]),[i,j], [terminals[i][:2], terminals[j][:2]]] for [i, j, w] in
                cleanlist]  # first element of list is number of steiner points, second is length
     for combo in combinations(terminals, 2):
-        branch_set.extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
+        branch_set[1].extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
 
     for combo in combinations(terminals, 3):
         polygon = Polygon([point[:2] for point in combo])
         polygonempty = True
         for j in terminals:
-            if polygon.contains(Point(j)):
+            if polygon.contains(Point(j)) and j not in combo:
                 polygonempty = False
                 break
         if polygonempty:
@@ -255,120 +408,115 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                 if (not reversedist(combo[0], combo[1], combo[2]) or not reversedist(combo[1], combo[0],
                                                                                      combo[2])) or not reversedist(
                     combo[2], combo[1], combo[0]):
-                    branch_set.append(equipoint3(combo[0], combo[1], combo[2]))
+                    a = pointdistance(combo[0], combo[1])
+                    b = pointdistance(combo[0], combo[2])
+                    c = pointdistance(combo[1], combo[2])
+                    biggest = max(a, b, c)
+                    if biggest == a:
+                        branch_set[1].append(equipoint3(combo[2], combo[0], combo[1]))
+                    if biggest == b:
+                        branch_set[1].append(equipoint3(combo[1], combo[0], combo[2]))
+                    if biggest == c:
+                        branch_set[1].append(equipoint3(combo[0], combo[2], combo[1]))
 
-    for branch_pair in combinations(branch_set, 2):
-        if len(branch_pair[0][2]) + len(branch_pair[1][2]) == 2:
-            if len(branch_pair[0][2]) == 0:
-                a = branch_pair[0][:2]
-                b = branch_pair[1][2][0][:2]
-                c = branch_pair[1][2][1][:2]
-                steiner_point = steiner(a, b, c)
-                if IsPointInCone(branch_pair[1],branch_pair[0]) and bottleconstraint([a,b,c],steiner_point,terminals_short,bottleneck):  # if the point is in the cone
-                    if steiner_point not in [a, b, c]:
-                        lunesempty = True
-                        for j in terminals:  # check lune constraint using proposed edges
-                            if ((luneconstraint(a, steiner_point, j) or luneconstraint(b, steiner_point,
-                                                                                       j)) or luneconstraint(c,
-                                                                                                             steiner_point,
-                                                                                                             j)) and j[
-                                                                                                                     :2] not in [
-                                a, b, c]:
-                                lunesempty = False
-                                break
-                        if lunesempty:
-                            fst_set.append([1, pointdistance(a, steiner_point) + pointdistance(b,
-                                                                                               steiner_point) + pointdistance(
-                                c, steiner_point),
-                                            [[a, steiner_point], [b, steiner_point], [c, steiner_point]]])
-            else:
-                a = branch_pair[1][:2]
-                b = branch_pair[0][2][0][:2]
-                c = branch_pair[0][2][1][:2]
-                steiner_point = steiner(a, b, c)
-                if IsPointInCone(branch_pair[0],branch_pair[1]) and bottleconstraint([a,b,c],steiner_point,terminals_short,bottleneck):  # if the point is in the cone
-                    if steiner_point not in [a, b, c]:
-                        lunesempty = True
-                        for j in terminals:  # check lune constraint using proposed edges
-                            if ((luneconstraint(a, steiner_point, j) or luneconstraint(b, steiner_point,
-                                                                                       j)) or luneconstraint(c,
-                                                                                                             steiner_point,
-                                                                                                             j)) and j[
-                                                                                                                     :2] not in [
-                                a, b, c]:
-                                lunesempty = False
-                                break
-                        if lunesempty:
-                            fst_set.append([1, pointdistance(a, steiner_point) + pointdistance(b,
-                                                                                               steiner_point) + pointdistance(
-                                c, steiner_point),
-                                            [[a, steiner_point], [b, steiner_point], [c, steiner_point]]])
-        if len(branch_pair[0][2]) + len(branch_pair[1][2]) == 3 and branch_pair[0][:2] != branch_pair[1][:2]:
-            if len(branch_pair[0][2]) == 0:
-                a = branch_pair[1][2][0][:2]
-                b = branch_pair[0][:2]
-                c = branch_pair[1][2][1][:2]
-                d = branch_pair[1][2][2][:2]
-                cross_point = findIntersection(a, b, c, d)
-                if (verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b)) and bottleconstraint([a,b,c,d],cross_point,terminals_short,bottleneck):
-                    if ((IsPointInCone(branch_pair[1],branch_pair[0]) and not distconstraint(c, d,
-                                                                                                  b)) and not reversedist(
-                        c, d, b)) and luneconstraint(c, d,
-                                                     b):  # if the point is in the cone, lune and distance constraints
-                        if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c, d,
-                                                                                                     a)) and quadconstraint(
-                            c, d, b):
-                            lunesempty = True
-                            for j in terminals:  # check lune constraint using proposed edges
-                                if (((luneconstraint(a, cross_point, j) or luneconstraint(b, cross_point,
-                                                                                          j)) or luneconstraint(c,
-                                                                                                                cross_point,
-                                                                                                                j)) or luneconstraint(
-                                    d, cross_point, j)) and j[:2] not in [a, b, c, d]:
-                                    lunesempty = False
-                                    break
-                            if lunesempty:
-                                fst_set.append([1, pointdistance(a, b) + pointdistance(c, d),
-                                                [[b, cross_point], [a, cross_point], [c, cross_point],
-                                                 [d, cross_point]]])
-            else:
-                a = branch_pair[0][2][0][:2]
-                b = branch_pair[1][:2]
-                c = branch_pair[0][2][1][:2]
-                d = branch_pair[0][2][2][:2]
-                cross_point = findIntersection(a, b, c, d)
-                if (verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b)) and bottleconstraint([a,b,c,d],cross_point,terminals_short,bottleneck):
-                    if (((IsPointInCone(branch_pair[0],branch_pair[1])) and not distconstraint(c, d,
-                                                                                                  b)) and not reversedist(
-                        c, d, b)) and luneconstraint(c, d,
-                                                     b):  # if the point is in the cone, lune and distance constraints
-                        if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c, d,
-                                                                                                     a)) and quadconstraint(
-                            c, d, b):
-                            lunesempty = True
-                            for j in terminals:  # check lune constraint using proposed edges
-                                if (((luneconstraint(a, cross_point, j) or luneconstraint(b, cross_point,
-                                                                                          j)) or luneconstraint(c,
-                                                                                                                cross_point,
-                                                                                                                j)) or luneconstraint(
-                                    d, cross_point, j)) and j[:2] not in [a, b, c, d]:
-                                    lunesempty = False
-                                    break
-                            if lunesempty:
-                                fst_set.append([1, pointdistance(a, b) + pointdistance(c, d),
-                                                [[b, cross_point], [a, cross_point], [c, cross_point],
-                                                 [d, cross_point]]])
-    # print("--- %s seconds ---" % (time.time() - start_time))
+    for i in range(1,kk+1): # Generate the sets of branches and FSTs with $i$ s.p.
+        print("i is ", i)
+        for m in range(math.floor(i/2)+1): #check range
+            print("m is ",m)
+            print(i-m,m,len(branch_set[i-m]),len(branch_set[m]))
+            for first_branch in branch_set[m]:
+                for second_branch in branch_set[i-m]:
+                    if not bool(set(first_branch[6]) & set(second_branch[6])):
+                        if 1 < i < kk:
+                            branch_set[i + 1].extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
+                        if IsPointInCone(first_branch,second_branch) and IsPointInCone(second_branch,first_branch):
+                            k_sum = first_branch[5] + second_branch[5]
+                            if k_sum == 1:
+                                if len(second_branch[2]) == 2: #second branch is guaranteed to be the one with non-zero k_sum
+                                    a = first_branch[:2]
+                                    b = second_branch[2][0][:2]
+                                    c = second_branch[2][1][:2]
+                                    steiner_point = steiner(a, b, c)
+                                    if bottleconstraint([a,b,c],steiner_point,terminals,bottleneck):
+                                        if steiner_point not in [a, b, c]:
+                                            lunesempty = True
+                                            for j in terminals:  # check lune constraint using proposed edges
+                                                if ((luneconstraint(a, steiner_point, j) or luneconstraint(b, steiner_point,
+                                                                                                           j)) or luneconstraint(
+                                                    c,
+                                                    steiner_point,
+                                                    j)) and j[
+                                                            :2] not in [
+                                                    a, b, c]:
+                                                    lunesempty = False
+                                                    break
+                                            if lunesempty:
+                                                fst_set.append([1, pointdistance(a, steiner_point) + pointdistance(b,
+                                                                                                                   steiner_point) + pointdistance(
+                                                    c, steiner_point),first_branch[6]+second_branch[6],
+                                                                [[a, steiner_point], [b, steiner_point],
+                                                                 [c, steiner_point]]])
+                                else:
+                                    a = second_branch[2][0][:2]
+                                    b = first_branch[:2]
+                                    c = second_branch[2][1][:2]
+                                    d = second_branch[2][2][:2]
+                                    cross_point = findIntersection(a, b, c, d)
+                                    if bottleconstraint([a,b,c,d],cross_point,terminals,bottleneck):
+                                        if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
+                                            if ((IsPointInCone(second_branch, first_branch) and not distconstraint(c, d,
+                                                                                                                      b)) and not reversedist(
+                                                c, d, b)) and luneconstraint(c, d,
+                                                                             b):  # if the point is in the cone, lune and distance constraints
+                                                if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c,
+                                                                                                                             d,
+                                                                                                                             a)) and quadconstraint(
+                                                    c, d, b):
+                                                    if cross_point not in [a,b,c,d]:
+                                                        lunesempty = True
+                                                        for j in terminals:  # check lune constraint using proposed edges
+                                                            if (((luneconstraint(a, cross_point, j) or luneconstraint(b,
+                                                                                                                      cross_point,
+                                                                                                                      j)) or luneconstraint(
+                                                                c,
+                                                                cross_point,
+                                                                j)) or luneconstraint(
+                                                                d, cross_point, j)) and j[:2] not in [a, b, c, d]:
+                                                                lunesempty = False
+                                                                break
+                                                        if lunesempty:
+                                                            fst_set.append([1, pointdistance(a, b) + pointdistance(c, d), first_branch[6]+second_branch[6],
+                                                                            [[b, cross_point], [a, cross_point], [c, cross_point],
+                                                                             [d, cross_point]]])
+                            else:
+                                new_fst = ReverseMelzak(first_branch,second_branch)
+                                if not any(edge is False for edge in new_fst):
+                                    if not any(pointdistance(edge[0],edge[1]) == 0 for edge in new_fst):
+                                        distance_sum = sum(pointdistance(edge[0], edge[1]) for edge in new_fst)
+                                        hyperedge = first_branch[6] + second_branch[6]
+                                        fst_set.append([k_sum,distance_sum,hyperedge,new_fst])
+            if m <= math.ceil(i/3) and i < kk:
+                for q in range(m,max(math.floor((i-m)/2),1)):
+                    print(m,q,i-(m+q))
+                    for first_branch in branch_set[m]:
+                        for second_branch in branch_set[q]:
+                            for third_branch in branch_set[i-(m+q)]:
+                                if len(set([(branch[0],branch[1]) for branch in [first_branch,second_branch,third_branch]])) == 3:
+                                    if (not bool(set(first_branch[6]) & set(second_branch[6])) and not bool(set(first_branch[6]) & set(third_branch[6]))) and not bool(set(third_branch[6]) & set(second_branch[6])):
+                                        choices = [first_branch, second_branch, third_branch]
+                                        for choice in choices:
+                                            rest = [x for x in choices if x != choice]
+                                            if IsPointInCone(rest[0],rest[1]) and IsPointInCone(rest[1],rest[0]):
+                                                NPx,NPy = NonPseudoPair(rest[0],rest[1])
+                                                if NPx[:2] not in [choice[:2],choice[3][:2],choice[4][:2]] and NPy[:2] not in [choice[:2],choice[3][:2],choice[4][:2]]:
+                                                    if alpha_ext(choice[3],choice[4],NPx,NPy):
+                                                        if rhombus_ext(choice,NPx,NPy):
+                                                            branch_set[i+1].append(equipoint3(choice,rest[0],rest[1]))
 
-    for i in fst_set:
-        listofterminals = FindTerminals(i[2])
-        terminalsbyindex = []
-        for point in listofterminals:
-            x = point + [[], [-1,-1],[-1,-1],"line"]
-            if x in terminals:
-                terminalsbyindex.append(terminals.index(x))
-        terminalsbyindex.sort()
-        i.insert(2, terminalsbyindex)
+
+
+    for FST in fst_set:
+        FST[2].sort()
 
     d = {}  # removing fst's if there exists an fst on the same terminals with same or smaller length.
     for sub in fst_set:
@@ -408,7 +556,7 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     return terminals, jae_set, times, edge_counts, triple_counts, quad_counts
 
 
-test_inputs = [20] # range(6,51)
+test_inputs = [10] # range(6,51)
 r = 1  # number of repeats
 
 times = []
@@ -416,108 +564,83 @@ edge_counts = []
 triple_counts = []
 quad_counts = []
 
-
+concat = True
 edge_counter = 0
 trip_counter = 0
 quad_counter = 0
-k = 1  # k in k-Steiner problem
+kk = 2  # k in k-Steiner problem
+
 # while quad_counter < 1:
 for i in range(r):
     for n in test_inputs:
         start_time = time.time()
+        # points = [[0.2178343823722475, 0.6553075480213325], [0.02397885385515164, 0.3736109877975905], [0.22702319470594223, 0.528581402882818], [0.8681328526369547, 0.5266025191673622], [0.39504462952946773, 0.6019658472489339], [0.2563355476081923, 0.5447634632428844], [0.7211755647279753, 0.869650908433547], [0.6438781081357572, 0.9556178537720864]]
+        # terminals = [x + [[], [-1,-1],[-1,-1],0,[points.index(x)]] for x in points]
         terminals = []
-        for q in range(n):  # randomly generates points, of form (x,y,<lowest allowed angle>,<highest allowed angle>)
-            newpoint = [random.random(), random.random(), [], [-1,-1],[-1,-1],"line"]
+        for q in range(n):  # randomly generates points, of form (x,y,topology,points at ends of arc,line/arc flag)
+            newpoint = [random.random(), random.random(), [], [-1,-1],[-1,-1],0,[q]]
             terminals.append(newpoint)
+        
+        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,kk)
 
-        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter)
+        if r == 1 and len(test_inputs) == 1:
 
-        n = int(n)
-        # number of Steiner points in each hyperedge
-        S = jae_set[0]
-        # length of each hyperedge
-        L = jae_set[1]
-        # terminals in each hyperedge
-        T = jae_set[2]
-        # list of edges
-        topologies = jae_set[3]
-        # number of iterations
-        iter = 1
+            fig, ax = plt.subplots()
 
-        milp_model = gp.Model("milp")
-        milp_model.Params.LogToConsole = 0
+            xs = [point[0] for point in terminals]  # this part is for plotting the points
+            ys = [point[1] for point in terminals]
+            plt.scatter(xs, ys)
 
-        # limit on the total number of Steiner points
-        kk = 1
+            for i in range(len(terminals)):
+                ax.annotate(i, (xs[i], ys[i]))
 
-        # number of hyperedges
-        h = len(S)
-        print(h)
+            for tops in jae_set[3]:
+                if len(tops) == 2:
+                    x = [tops[0][0], tops[1][0]]
+                    y = [tops[0][1], tops[1][1]]
+                    plt.plot(x, y, 'r')
+                else:
+                    for edge in tops:
+                        x = [edge[0][0], edge[1][0]]
+                        y = [edge[0][1], edge[1][1]]
+                        if len(tops) == 3:
+                            plt.plot(x, y, 'b')
+                        else:
+                            plt.plot(x, y, 'k')
 
-        x = milp_model.addVars(h, vtype=GRB.BINARY)
-
-        # print("L is ",L," and x is ", x)
-
-        milp_model.setObjective(sum(L[i] * x[i] for i in range(h)), GRB.MINIMIZE)
-        c2 = milp_model.addConstr(sum(S[i] * x[i] for i in range(h)) <= kk)
-
-        milp_model.optimize()
-
-        xvalues = np.zeros((h), dtype=int)
-        for i in range(h):
-            xvalues[i] = x[i].x
-
-        print(xvalues)
-
-        components = [i for i in range(n)]
-
-        hypertree = find(xvalues, 1)
-        for i in range(len(hypertree)):
-            currenthyper = hypertree[i]
-            vincurrenthyper = T[currenthyper]
-
-            comps = [components[i] for i in vincurrenthyper]
-            aa = len(comps)
-            compsnodouble = list(set(comps))
-            ab = len(compsnodouble)
-
-            nextitcomp = np.min(compsnodouble)
-
-            for j in range(ab):
-                if nextitcomp != compsnodouble[j]:
-                    tempind = find(components, compsnodouble[j])
-                    for k in tempind:
-                        components[k] = nextitcomp
-
-        # number of comps in the current graph
-        noofcomps = len(list(set(components)))
-
-        print(components)
-
-        while noofcomps > 1.5:
-
-            iter = iter + 1
-            # labels of different components
-            l = list(set(components))
-            p = len(l)
-            dfjeqns = np.zeros((p, h), dtype=int)
-
-            for i in range(h):
-                currenth = T[i]
-
-                for j in range(p):
-                    # currentcompv denotes all vertices in the current component
-                    currentcompv = find(components, l[j])
-                    # notcurrentcompv denotes all vertices not in the current component
-                    notcurrentcompv = list(set(range(n)) - set(currentcompv))
-
-                    if len(set(currentcompv)-set(currenth)) < len(currentcompv) and \
-                            len(set(notcurrentcompv) - set(currenth)) < len(notcurrentcompv):
-
-                        dfjeqns[j, i] = 1
+            ax.set_xlim([0, 1])
+            ax.set_ylim([0, 1])
+            ax.set_aspect('equal')
+            plt.show()
 
 
-            milp_model.addConstrs(sum(x[i] * dfjeqns[j, i] for i in range(h)) >= 1 for j in range(p))
+        if concat == True:
+            n = int(n)
+            # number of Steiner points in each hyperedge
+            S = jae_set[0]
+            # length of each hyperedge
+            L = jae_set[1]
+            # terminals in each hyperedge
+            T = jae_set[2]
+            # list of edges
+            topologies = jae_set[3]
+            # number of iterations
+            iter = 1
+
+            milp_model = gp.Model("milp")
+            milp_model.Params.LogToConsole = 0
+
+            # number of hyperedges
+            h = len(S)
+            print(h)
+
+            x = milp_model.addVars(h, vtype=GRB.BINARY)
+
+            # print("L is ",L," and x is ", x)
+
+            milp_model.setObjective(sum(L[i] * x[i] for i in range(h)), GRB.MINIMIZE)
+            c2 = milp_model.addConstr(sum(S[i] * x[i] for i in range(h)) <= kk)
+
             milp_model.optimize()
 
             xvalues = np.zeros((h), dtype=int)
@@ -551,31 +674,92 @@ for i in range(r):
 
             print(components)
 
-        htree = find(xvalues, 1)
-        print(htree)
-        print(iter)
+            while noofcomps > 1.5:
 
-        print("--- %s seconds ---" % (time.time() - start_time))
+                iter = iter + 1
+                # labels of different components
+                l = list(set(components))
+                p = len(l)
+                dfjeqns = np.zeros((p, h), dtype=int)
 
-        def count(l):
-            return sum(1 + count(i) for i in l if isinstance(i,list))
+                for i in range(h):
+                    currenth = T[i]
 
-        fig, ax = plt.subplots()
-        for i in range(len(htree)):
-            a = htree[i]
-            he = topologies[a]
-            c = count(he)
-            if c == 2:
-                plt.plot([he[0][0], he[1][0]], [he[0][1], he[1][1]], 'r')
-            else:
-                for j in range(len(he)):
-                    e = he[j]
-                    plt.plot([e[0][0], e[1][0]], [e[0][1], e[1][1]], 'b')
+                    for j in range(p):
+                        # currentcompv denotes all vertices in the current component
+                        currentcompv = find(components, l[j])
+                        # notcurrentcompv denotes all vertices not in the current component
+                        notcurrentcompv = list(set(range(n)) - set(currentcompv))
 
-        plt.xlim([-0.05, 1.05])
-        plt.ylim([-0.05, 1.05])
-        ax.set_aspect('equal')
+                        if len(set(currentcompv)-set(currenth)) < len(currentcompv) and \
+                                len(set(notcurrentcompv) - set(currenth)) < len(notcurrentcompv):
 
-        for i in range(n):
-            plt.scatter(terminals[i][0], terminals[i][1], c = 'k')
-        plt.show()
+                            dfjeqns[j, i] = 1
+
+
+                milp_model.addConstrs(sum(x[i] * dfjeqns[j, i] for i in range(h)) >= 1 for j in range(p))
+                milp_model.optimize()
+
+                xvalues = np.zeros((h), dtype=int)
+                for i in range(h):
+                    xvalues[i] = x[i].x
+
+                print(xvalues)
+
+                components = [i for i in range(n)]
+
+                hypertree = find(xvalues, 1)
+                for i in range(len(hypertree)):
+                    currenthyper = hypertree[i]
+                    vincurrenthyper = T[currenthyper]
+
+                    comps = [components[i] for i in vincurrenthyper]
+                    aa = len(comps)
+                    compsnodouble = list(set(comps))
+                    ab = len(compsnodouble)
+
+                    nextitcomp = np.min(compsnodouble)
+
+                    for j in range(ab):
+                        if nextitcomp != compsnodouble[j]:
+                            tempind = find(components, compsnodouble[j])
+                            for k in tempind:
+                                components[k] = nextitcomp
+
+                # number of comps in the current graph
+                noofcomps = len(list(set(components)))
+
+                print(components)
+
+            htree = find(xvalues, 1)
+            print(htree)
+            print(iter)
+
+            print("--- %s seconds ---" % (time.time() - start_time))
+
+            def count(l):
+                return sum(1 + count(i) for i in l if isinstance(i,list))
+
+            fig, ax = plt.subplots()
+
+            for i in range(len(terminals)):
+                ax.annotate(i, (xs[i], ys[i]))
+
+            for i in range(len(htree)):
+                a = htree[i]
+                he = topologies[a]
+                c = count(he)
+                if c == 2:
+                    plt.plot([he[0][0], he[1][0]], [he[0][1], he[1][1]], 'r')
+                else:
+                    for j in range(len(he)):
+                        e = he[j]
+                        plt.plot([e[0][0], e[1][0]], [e[0][1], e[1][1]], 'b')
+
+            plt.xlim([-0.05, 1.05])
+            plt.ylim([-0.05, 1.05])
+            ax.set_aspect('equal')
+
+            for i in range(n):
+                plt.scatter(terminals[i][0], terminals[i][1], c = 'k')
+            plt.show()
