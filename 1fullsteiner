@@ -5,9 +5,32 @@ import matplotlib.pyplot as plt
 import math
 import random
 import time
+import numpy as np
 from itertools import combinations
-from shapely.geometry import Point
+from shapely.geometry import Point, MultiPoint
 from shapely.geometry.polygon import Polygon, LinearRing
+
+def gridloc(point):
+    a = math.floor(point[0]*ff)
+    b = math.floor(point[1]*gg)
+    if a < 0:
+        a = 0
+    if b < 0:
+        b = 0
+    if a >= ff:
+        a = ff - 1
+    if b >= gg:
+        b = gg - 1
+    return a,b
+
+def gridrange(pointlist):
+    xvals = []
+    yvals = []
+    for point in pointlist:
+        x,y = gridloc(point)
+        xvals.append(x)
+        yvals.append(y)
+    return min(xvals),max(xvals),min(yvals),max(yvals)
 
 def find(lst, a):
     return [i for i, x in enumerate(lst) if x == a]
@@ -56,7 +79,6 @@ class Graph:
                 self.apply_union(parent, rank, x, y)
         return result
 
-
 def findangle(p1,p2):  # finds angle in degrees of p2 from p1, 0 degrees is parallel to the x-axis, to the right
     rise = p2[1] - p1[1]
     run = p2[0] - p1[0]
@@ -70,31 +92,46 @@ def findangle(p1,p2):  # finds angle in degrees of p2 from p1, 0 degrees is para
     else:
         return math.degrees(math.atan2(rise,run))
 
-
 def rotatedpoint(p1, p2, angle):  # rotates p2 around p1 by given angle
     qx = p1[0] + math.cos(math.radians(angle)) * (p2[0] - p1[0]) - math.sin(math.radians(angle)) * (p2[1] - p1[1])
     qy = p1[1] + math.sin(math.radians(angle)) * (p2[0] - p1[0]) + math.cos(math.radians(angle)) * (p2[1] - p1[1])
     return [qx, qy]
 
-
 def pointdistance(p1, p2):
     return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
 
+def pointtolinedistance(p1,p2,p3): #distance from p3 to line through p1,p2
+    if p1[1] == p2[1]:
+        if p1[0] <= p3[0] <= p2[0] or p2[0] <= p3[0] <= p1[0]:
+            return p3[1] - p1[1]
+        else:
+            return min(pointdistance(p1,p3),pointdistance(p2,p3))
+    else:
+        gradient = -(p2[0]-p1[0])/(p2[1]-p1[1])
+        new_point = [p3[0]+1,p3[1]+gradient]
+        intersect = findIntersection(p1,p2,p3,new_point)
+        if p1[0] <= intersect[0] <= p2[0] or p2[0] <= intersect[0] <= p1[0]:
+            return pointdistance(p3,intersect)
+        else:
+            return min(pointdistance(p1,p3),pointdistance(p2,p3))
+
+def linetolinedistance(p1,p2,p3,p4):
+    return min([pointtolinedistance(p1,p2,p3),pointtolinedistance(p1,p2,p4),pointtolinedistance(p3,p4,p1),pointtolinedistance(p3,p4,p2)])
 
 def equipoint2(p1, p2):
     newpoint = rotatedpoint(p1, p2, 60)
     return [newpoint[0], newpoint[1], [p1, p2], p1[:2], p2[:2],p1[5]+p2[5]+1,p1[6]+p2[6]] # note final addition is a list addition
 
-
 def equipoint3(p1, p2, p3):
-    return [p1[0], p1[1], [p1, p2, p3], p2[:2], p3[:2], p1[5]+p2[5]+p3[5]+1,p1[6]+p2[6]+p3[6]] # note final addition is a list addition
+    if p1[3] == p1[4] == [-1,-1]:
+        return [p1[0], p1[1], [p1, p2, p3], p2[:2], p3[:2], p1[5]+p2[5]+p3[5]+1,p1[6]+p2[6]+p3[6]] # note final addition is a list addition
+    else:
+        new_params = IntervalProjectionTest(p1, p2, p3)
+        return [p1[0], p1[1], [p1, p2, p3], new_params[0], new_params[1], p1[5]+p2[5]+p3[5]+1,p1[6]+p2[6]+p3[6]] # note final addition is a list addition
 
-
-
-def getAngle(a, b, c):  # finds angle between these three points at b
+def getAngle(a, b, c):  # finds angle between these three points at b, taken clockwise
     ang = math.degrees(math.atan2(c[1] - b[1], c[0] - b[0]) - math.atan2(a[1] - b[1], a[0] - b[0]))
     return ang
-
 
 def findIntersection(A, B, C, D): #intersection of line through A,B with line through C,D
     px = ((A[0] * B[1] - A[1] * B[0]) * (C[0] - D[0]) - (A[0] - B[0]) * (C[0] * D[1] - C[1] * D[0])) / (
@@ -102,7 +139,6 @@ def findIntersection(A, B, C, D): #intersection of line through A,B with line th
     py = ((A[0] * B[1] - A[1] * B[0]) * (C[1] - D[1]) - (A[1] - B[1]) * (C[0] * D[1] - C[1] * D[0])) / (
                 (A[0] - B[0]) * (C[1] - D[1]) - (A[1] - B[1]) * (C[0] - D[0]))
     return [px, py]
-
 
 def steiner(A, B, C):
     a = getAngle(B, A, C)
@@ -124,12 +160,18 @@ def distconstraint(p1, p2, p3):  # Marcus conjecture where n=1/(2*sqrt(3) . Form
     return abs((p2[0] - p1[0]) * (p1[1] - p3[1]) - (p1[0] - p3[0]) * (p2[1] - p1[1])) <= (1 / (2 * math.sqrt(3))) * (
                 (p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
 
-
 def reversedist(p1, p2, p3):  # p3 is the point we are checking distance from interval p1-p2
     m = 1 / (2 * math.sqrt(3))
     return (((1 - 2 * m ** 2) / (2 * m)) * ((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2) < abs(
         (p2[0] - p1[0]) * (p1[1] - p3[1]) - (p1[0] - p3[0]) * (p2[1] - p1[1])))
 
+def termsinlune(x,y,terms,allowed): #returns True if there is no terminal in the lune of x and y that is not in the allowed list
+    lunesempty = True
+    for j in terms:  # check lune constraint using proposed edges
+        if luneconstraint(x,y, j) and j[:2] not in [x[:2],y[:2]] + [point[:2] for point in allowed]:
+            lunesempty = False
+            break
+    return lunesempty
 
 def luneconstraint(p1, p2, p3):  # returns true if p3 is inside the lune of p1 and p2
     return (pointdistance(p3, p2) <= pointdistance(p1, p2)) and (pointdistance(p3, p1) <= pointdistance(p1, p2))
@@ -144,8 +186,8 @@ def bottleconstraint(list1,stein,terms,bottle):
     return True
 
 def quadconstraint(p1, p2, p3):  # returns true if p3 is inside the quad of p1 and p2
-    quad = Polygon([p1[:2], rotatedpoint(p1, p2, 60), p2[:2], rotatedpoint(p2, p1, 60)])
-    return quad.contains(Point(p3))
+    quad = [p1[:2], rotatedpoint(p1, p2, 60), p2[:2], rotatedpoint(p2, p1, 60)]
+    return ray_tracing_method(p3[0],p3[1],quad)
 
 def same_side(u,v,x,y): #returns true if both u and v are on the same side of x and y
     if y[0] == x[0]:
@@ -153,6 +195,12 @@ def same_side(u,v,x,y): #returns true if both u and v are on the same side of x 
     else:
         m = (y[1] - x[1]) / (y[0] - x[0])
         return ((u[1] - m*u[0] >= x[1] - m*x[0]) and (v[1] - m*v[0] >= x[1] - m*x[0])) or ((u[1] - m*u[0] <= x[1] - m*x[0]) and (v[1] - m*v[0] <= x[1] - m*x[0]))
+
+def same_side3(p1,p2,p3): #True if p2 and p3 are on same side of p1
+    if p1[0] == p2[0] == p3[0]:
+        return not ((p2[1] < p1[1] < p3[1]) or (p3[1] < p1[1] < p2[1]))
+    else:
+        return not ((p2[0] < p1[0] < p3[0]) or (p3[0] < p1[0] <p2[0]))
 
 
 def alpha_ext(u,v,x,y): #iterated version of alpha constraint, simple application. Returns false if both u and v fail the alpha constraint. Requires both u and v to be on the same side of the xy line
@@ -182,7 +230,6 @@ def verticalconstraint(p1, p2, p3, p4):  # check if p3,p4 is in Jae's vertical c
                            min(p1[1] - m * p1[0], p2[1] - m * p2[0]) <= p4[1] - m * p4[0] <= max(p1[1] - m * p1[0],
                                                                                                  p2[1] - m * p2[0]))
 
-
 def FindTerminals(list1):
     terminallist = []
     for i in list1:
@@ -191,6 +238,12 @@ def FindTerminals(list1):
         else:
             terminallist.extend(FindTerminals(i))
     return terminallist
+
+def ProjectionToArc(z,proj):
+    if len(z[2]) == 2:
+        return [point for point in ArcLineInter(z,proj,z) if point != z][0]
+    else:
+        return findIntersection(z,proj,z[2][1],z[2][2])
 
 def IsPointInCone(eqpoint1,eqpoint2): #checks if eqpoint2 is in cone of eqpoint1
     if eqpoint1[3] == eqpoint1[4] == [-1,-1]: #dummy locations for order-0 pseudoterminals
@@ -211,6 +264,58 @@ def IsPointInCone(eqpoint1,eqpoint2): #checks if eqpoint2 is in cone of eqpoint1
                 return angletobase1 < angletopoint < angletobase2
         else:
             return angletobase1 < angletopoint < angletobase2 or angletobase2 < angletopoint < angletobase1
+
+def IntervalProjectionTest(point,x,y): #returns false if interval not in cone, otherwise returns new arc/line endpoints
+    if point[3] == point[4] == [-1, -1]:  # dummy locations for order-0 pseudoterminals
+        return point[3], point[4]
+    angletopoint1 = findangle(point, point[3])
+    angletopoint2 = findangle(point, point[4])
+    angletobase1 = findangle(point,x)
+    angletobase2 = findangle(point,y)
+    if angletobase1 <= -120 and angletobase2 >= 120:
+        angletobase1 += 360
+        if angletopoint1 <= 120:
+            angletopoint1 += 360
+        if angletopoint2 <= 120:
+            angletopoint2 += 360
+    elif angletobase2 <= -120 and angletobase1 >= 120:
+        angletobase2 += 360
+        if angletopoint1 <= 120:
+            angletopoint1 += 360
+        if angletopoint2 <= 120:
+            angletopoint2 += 360
+    point1inside = (angletobase1 <= angletopoint1 <= angletobase2) or (angletobase2 <= angletopoint1 <= angletobase1)
+    point2inside = (angletobase1 <= angletopoint2 <= angletobase2) or (angletobase2 <= angletopoint2 <= angletobase1)
+    if point1inside and point2inside:
+        return point[3],point[4]
+    elif not point1inside and not point2inside:
+        return False, False
+    elif not point1inside and point2inside:
+        if (angletopoint1 <= angletobase1 <= angletopoint2) or (angletopoint2 <= angletobase1 <= angletopoint1):
+            return x,point[4]
+        else:
+            return y,point[4]
+    else:
+        if (angletopoint1 <= angletobase1 <= angletopoint2) or (angletopoint2 <= angletobase1 <= angletopoint1):
+            return point[3],x
+        else:
+            return point[3],y
+
+def DoConesOverlap(p1,p2):
+    if p1[3] == p1[4] == [-1,-1] or p2[3] == p2[4] == [-1,-1]:
+        return True
+    else:
+        print((p1,p1[3],p2,p2[3]))
+        a = findIntersection(p1,p1[3],p2,p2[3])
+        print(p1, p1[3], p2, p2[4])
+        b = findIntersection(p1,p1[3],p2,p2[4])
+        print(p1, p1[4], p2, p2[3])
+        c = findIntersection(p1, p1[4], p2, p2[3])
+        print(p1,p1[4],p2,p2[4])
+        d = findIntersection(p1,p1[4],p2,p2[4])
+        first_point = (same_side3(p1,p1[3],a) and same_side3(p2,p2[3],a)) or (same_side3(p1,p1[3],b) and same_side3(p2,p2[4],b))
+        second_point = (same_side3(p1,p1[4],c) and same_side3(p2,p2[3],c)) or (same_side3(p1,p1[4],d) and same_side3(p2,p2[4],d))
+        return first_point or second_point
 
 def ReverseMelzak(point1,point2):
     edgelist =[]
@@ -341,6 +446,106 @@ def rhombus_ext(point,x,y): #returns False if arc does not have any points in th
         else:
             return True
 
+def tangentpoint(x,y,centre_x,centre_y,radius): #finds the two points on a circle for which the tangent passes through x,y
+    b = sqrt((x - centre_x)**2 + (y - centre_y)**2)
+    th = math.acos(radius / b)  # angle theta
+    d = math.atan2(y - centre_y, x - centre_x)  # direction angle of point P from C
+    d1 = d + th  # direction angle of point T1 from C
+    d2 = d - th  # direction angle of point T2 from C
+
+    T1x = centre_x + radius * math.cos(d1)
+    T1y = centre_y + radius * math.sin(d1)
+    T2x = centre_x + radius * math.cos(d2)
+    T2y = centre_y + radius * math.sin(d2)
+    return [T1x,T1y],[T2x,T2y]
+
+def ray_tracing_method(x,y,poly): #returns true if x,y is in poly
+
+    n = len(poly)
+    inside = False
+
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+
+    return inside
+
+def triangle_ext(point,x,y,gridterms): #returns true if triangle is empty, must be done after IntervalProjectionTest
+    vertices = [point[:2],x[:2],y[:2]]
+    # polygon = Polygon(vertices)
+    if len(point[2]) > 0:
+        # first find the points on the arc that give a tangent through x,y, or take u,v if they lie outside the arc
+        circle_centre,circle_radius = FindCircle(point[:2],point[3],point[4])
+        rhs = findIntersection(point[:2],point[3],x,y)
+        lhs = findIntersection(point[:2],point[4],x,y)
+        rhs_tangent1, rhs_tangent2 = tangentpoint(rhs[0],rhs[1],circle_centre[0],circle_centre[1],circle_radius)
+        lhs_tangent1, lhs_tangent2 = tangentpoint(lhs[0], lhs[1], circle_centre[0], circle_centre[1], circle_radius)
+        lhs_poss = []
+        rhs_poss = []
+        if IsPointInCone(point,lhs_tangent1):
+            lhs_poss.append(lhs_tangent1)
+        if IsPointInCone(point,lhs_tangent2):
+            lhs_poss.append(lhs_tangent2)
+        if IsPointInCone(point,rhs_tangent1):
+            rhs_poss.append(rhs_tangent1)
+        if IsPointInCone(point,rhs_tangent2):
+            rhs_poss.append(rhs_tangent2)
+        tang_point1 = point[3]
+        tang_point2 = point[4]
+
+        if len(rhs_poss) > 0:
+            rhs_poss = sorted(rhs_poss, key= lambda val: pointdistance(val,point[4]))
+            tang_point2 = rhs_poss[0]
+        if len(lhs_poss) > 0:
+            lhs_poss = sorted(lhs_poss, key= lambda val: pointdistance(val,point[3]))
+            tang_point1 = lhs_poss[0]
+
+        top = findIntersection(tang_point1,x,tang_point2,y)
+        if not ray_tracing_method(top[0],top[1],vertices):
+            top = findIntersection(tang_point1,y,tang_point2,x)
+        vertices = [top,x[:2],y[:2]]
+        # polygon = Polygon([top,x[:2],y[:2]])
+    polygonempty = True
+    xmin,xmax,ymin,ymax = gridrange(vertices)
+    for xx in range(xmin,xmax+1):
+        for yy in range(ymin,ymax+1):
+            # print(xx,yy)
+            # print("current bounds are ",xmin,xmax,ymin,ymax)
+            for point in gridterms[xx][yy]:
+                # print(point)
+                if ray_tracing_method(point[0],point[1],vertices) and point[:2] not in vertices:
+                    polygonempty = False
+                    break
+            if not polygonempty:
+                break
+        if not polygonempty:
+            break
+    return polygonempty
+
+def bottle_ext(x,y,z,bottleneck):
+    bot_dist = []
+    for a in z[6]:
+        for b in y[6] + x[6]:
+            bot_dist.append(bottleneck[a][b])
+    if len(z[2]) == 0:
+        distance = pointtolinedistance(x, y, z)
+    elif len(z[2]) == 2:
+        centre,radius = FindCircle(z[:2],z[2][0],z[2][1])
+        distance = pointtolinedistance(x,y,centre) - radius
+    elif len(z[2]) == 3:
+        distance = linetolinedistance(z[2][1],z[2][2],x,y)
+    else:
+        return True
+    return distance <= min(bot_dist)
+
 def depth(L):
     if L == []:
         return 0
@@ -358,9 +563,60 @@ def MelzCheck(point1,point2): #returns false if Melzak will have an error due to
         check2 = not 120 <= b <= 240
     return check1 and check2
 
-def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,kk):
-    branch_set = [[] for x in range(2*kk+3)]  # general data structure for branches: list with [location,topology,angles]
+def boundaryconstraint(p1,p2,hullbound):
+    return hullbound.contains(Point(p1)) and hullbound.contains(Point(p2))
+
+def simple_lune_ext(x,y,z,terms): #to be fixed if x,y interval is vertical
+    if z[3] == z[4] == [-1,-1]:
+        return z[3],z[4]
+    poss1 = findIntersection(x,y,z,z[3]) #note we already know that projections of u and v give us an interval equal to or in xy
+    poss2 = findIntersection(x,y,z,z[4])
+    dist1 = pointdistance(poss1,x)
+    dist2 = pointdistance(poss2,x)
+    if dist1 <= dist2:
+        ix = poss1
+        iy = poss2
+    else:
+        ix = poss2
+        iy = poss1
+    iy, xiy_dist = simple_ext_lemma(x,iy,y,z,terms)
+    ix,yix_dist = simple_ext_lemma(y,ix,x,z,terms)
+    if pointdistance(x,ix) >= xiy_dist:
+        return False, False
+    else:
+        return ProjectionToArc(z,ix),ProjectionToArc(z,iy)
+
+def simple_ext_lemma(x,iy,y,z,terminals):
+    xy_gradient = (y[1] -x[1])/(y[0] - x[0])
+    points_in_lune = []
+    for point in terminals:
+        if luneconstraint(x,iy,point) and point not in [x,y,z]:
+            points_in_lune.append(point)
+    point_dists = []
+    if len(point_dists) > 0:
+        for point in points_in_lune:
+            angle = getAngle(y,x,point)
+            if 60 <= angle <= 300:
+                point_dists.append(pointdistance(x,point)/2*math.cos(angle))
+                #don't need to worry which side of angle since cos(360 - angle) = cos(angle)
+            else:
+                point_dists.append(pointdistance(x,point))
+        min_dist = min(point_dists)
+        if y[0] >= x[0]:
+            new_iy = [x[0]+math.sqrt(min_dist/(1+xy_gradient**2)),x[1] + xy_gradient*math.sqrt(min_dist/(1+xy_gradient**2))]
+        else:
+            new_iy = [x[0] - math.sqrt(min_dist / (1 + xy_gradient ** 2)),
+                      x[1]  - xy_gradient * math.sqrt(min_dist / (1 + xy_gradient ** 2))]
+    else:
+        new_iy = iy
+        min_dist = 0
+    return new_iy,min_dist
+
+def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,kk,fst_size):
+    branch_set = [[] for x in range(kk+1)]  # general data structure for branches: list with [location,topology,angles]
     branch_set[0].extend(terminals) #index is size of branch minus 1
+
+    did_it_help = 0
 
     g = Graph(n)
 
@@ -392,32 +648,70 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
 
     fst_set = [[0, pointdistance(terminals[i], terminals[j]),[i,j], [terminals[i][:2], terminals[j][:2]]] for [i, j, w] in
                cleanlist]  # first element of list is number of steiner points, second is length
-    for combo in combinations(terminals, 2):
-        branch_set[1].extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
+    part1 = 0
+    part2 = 0
+    part3 = 0
+    part4 = 0
 
+    terminals_short = [tuple(point[:2]) for point in terminals]
+
+    hull = MultiPoint(terminals_short).convex_hull
+    hullboundary = MultiPoint(terminals_short).convex_hull.boundary
+
+    for combo in combinations(terminals, 2):
+        part1 += 2
+
+        ep1 = equipoint2(combo[0],combo[1])
+        ep2 = equipoint2(combo[1],combo[0])
+
+
+        if not (boundaryconstraint(combo[0],combo[1],hullboundary) and hull.contains(Point(ep1[:2]))):
+            branch_set[1].append(ep1)
+
+        if not (boundaryconstraint(combo[0],combo[1],hullboundary) and hull.contains(Point(ep2[:2]))):
+            branch_set[1].append(ep2)
+    checking = 0
     for combo in combinations(terminals, 3):
-        polygon = Polygon([point[:2] for point in combo])
-        polygonempty = True
-        for j in terminals:
-            if polygon.contains(Point(j)) and j not in combo:
-                polygonempty = False
-                break
-        if polygonempty:
-            if (not distconstraint(combo[0], combo[1], combo[2]) or not distconstraint(combo[1], combo[0], combo[
-                2])) or not distconstraint(combo[2], combo[1], combo[0]):
-                if (not reversedist(combo[0], combo[1], combo[2]) or not reversedist(combo[1], combo[0],
-                                                                                     combo[2])) or not reversedist(
-                    combo[2], combo[1], combo[0]):
-                    a = pointdistance(combo[0], combo[1])
-                    b = pointdistance(combo[0], combo[2])
-                    c = pointdistance(combo[1], combo[2])
-                    biggest = max(a, b, c)
-                    if biggest == a:
-                        branch_set[1].append(equipoint3(combo[2], combo[0], combo[1]))
-                    if biggest == b:
-                        branch_set[1].append(equipoint3(combo[1], combo[0], combo[2]))
-                    if biggest == c:
-                        branch_set[1].append(equipoint3(combo[0], combo[2], combo[1]))
+        if not conjecture or ((not distconstraint(combo[0], combo[1], combo[2]) or not distconstraint(combo[1], combo[0], combo[
+            2])) or not distconstraint(combo[2], combo[1], combo[0])):
+            if not conjecture or ((not reversedist(combo[0], combo[1], combo[2]) or not reversedist(combo[1], combo[0],
+                                                                                 combo[2])) or not reversedist(
+                combo[2], combo[1], combo[0])):
+                polygon = [point[:2] for point in combo]
+                xmin,xmax,ymin,ymax = gridrange(polygon)
+                polygonempty = True
+                for xx in range(xmin,xmax+1):
+                    for yy in range(ymin,ymax+1):
+                        for j in grid[xx][yy]:
+                            if ray_tracing_method(j[0], j[1], polygon) and j not in combo:
+                                polygonempty = False
+                                break
+                        if not polygonempty:
+                            break
+                    if not polygonempty:
+                        break
+                if polygonempty:
+                    pairs = [[combo[0], combo[1]],[combo[0], combo[2]],[combo[1], combo[2]]]
+                    pairs.sort(key=lambda item: pointdistance(item[0],item[1]))
+                    a = pairs[2][0]
+                    b = pairs[2][1]
+                    other = [point for point in combo if point not in pairs[2]][0]
+                    checking += 1
+                    # print(pointtolinedistance(a,b,other),min(bottleneck[a[6][0]][other[6][0]],bottleneck[b[6][0]][other[6][0]]))
+                    if pointtolinedistance(a,b,other) <= min(bottleneck[a[6][0]][other[6][0]],bottleneck[b[6][0]][other[6][0]]):
+                        if not (boundaryconstraint(a,b, hullboundary) and hull.contains(Point(other[:2]))):
+                            branch_set[1].append(equipoint3(other, a,b))
+                            part2 += 1
+                        else:
+                            did_it_help += 1
+                    else:
+                        did_it_help += 1
+
+
+    # branch_set[1].sort()
+    # branch_set[1] = list(branch_set[1] for branch_set[1], _ in itertools.groupby(branch_set[1]))
+    eff = [0,0,0,0,0,0]
+    tot = [0,0,0,0,0,0]
 
     for i in range(1,kk+1): # Generate the sets of branches and FSTs with $i$ s.p.
         print("i is ", i)
@@ -428,7 +722,10 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                 for second_branch in branch_set[i-m]:
                     if not bool(set(first_branch[6]) & set(second_branch[6])):
                         if 1 < i < kk:
-                            branch_set[i + 1].extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
+                            if DoConesOverlap(first_branch,second_branch):
+                                part3 += 1
+                                if equipoint2(combo[0], combo[1]) not in branch_set[i+1]:
+                                    branch_set[i + 1].extend([equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
                         if IsPointInCone(first_branch,second_branch) and IsPointInCone(second_branch,first_branch):
                             k_sum = first_branch[5] + second_branch[5]
                             if k_sum == 1:
@@ -439,20 +736,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                     steiner_point = steiner(a, b, c)
                                     if bottleconstraint([a,b,c],steiner_point,terminals,bottleneck):
                                         if steiner_point not in [a, b, c]:
-                                            lunesempty = True
-                                            for j in terminals:  # check lune constraint using proposed edges
-                                                if ((luneconstraint(a, steiner_point, j) or luneconstraint(b, steiner_point,
-                                                                                                           j)) or luneconstraint(
-                                                    c,
-                                                    steiner_point,
-                                                    j)) and j[
-                                                            :2] not in [
-                                                    a, b, c]:
-                                                    lunesempty = False
-                                                    break
-                                            if lunesempty:
-                                                fst_set.append([1, pointdistance(a, steiner_point) + pointdistance(b,
-                                                                                                                   steiner_point) + pointdistance(
+                                            if all([termsinlune(a,steiner_point,terminals,[a]),termsinlune(b,steiner_point,terminals,[b]),termsinlune(c,steiner_point,terminals,[c])]):
+                                                fst_set.append([1, pointdistance(a, steiner_point) + pointdistance(b,steiner_point) + pointdistance(
                                                     c, steiner_point),first_branch[6]+second_branch[6],
                                                                 [[a, steiner_point], [b, steiner_point],
                                                                  [c, steiner_point]]])
@@ -462,58 +747,91 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                     c = second_branch[2][1][:2]
                                     d = second_branch[2][2][:2]
                                     cross_point = findIntersection(a, b, c, d)
-                                    if bottleconstraint([a,b,c,d],cross_point,terminals,bottleneck):
-                                        if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
-                                            if ((IsPointInCone(second_branch, first_branch) and not distconstraint(c, d,
-                                                                                                                      b)) and not reversedist(
-                                                c, d, b)) and luneconstraint(c, d,
-                                                                             b):  # if the point is in the cone, lune and distance constraints
-                                                if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c,
-                                                                                                                             d,
-                                                                                                                             a)) and quadconstraint(
-                                                    c, d, b):
-                                                    if cross_point not in [a,b,c,d]:
-                                                        lunesempty = True
-                                                        for j in terminals:  # check lune constraint using proposed edges
-                                                            if (((luneconstraint(a, cross_point, j) or luneconstraint(b,
-                                                                                                                      cross_point,
-                                                                                                                      j)) or luneconstraint(
-                                                                c,
-                                                                cross_point,
-                                                                j)) or luneconstraint(
-                                                                d, cross_point, j)) and j[:2] not in [a, b, c, d]:
-                                                                lunesempty = False
-                                                                break
-                                                        if lunesempty:
-                                                            fst_set.append([1, pointdistance(a, b) + pointdistance(c, d), first_branch[6]+second_branch[6],
-                                                                            [[b, cross_point], [a, cross_point], [c, cross_point],
-                                                                             [d, cross_point]]])
+                                    cross_point_in_ab = (a[0] <= cross_point[0] <= b[0]) or (b[0] <= cross_point[0] <= a[0])
+                                    cross_point_in_cd = (c[0] <= cross_point[0] <= d[0]) or (d[0] <= cross_point[0] <= c[0])
+                                    if cross_point_in_ab and cross_point_in_cd:
+                                        if bottleconstraint([a,b,c,d],cross_point,terminals,bottleneck):
+                                            if verticalconstraint(a, b, c, d) and verticalconstraint(c, d, a, b):
+                                                if ((IsPointInCone(second_branch, first_branch) and not distconstraint(c, d,
+                                                                                                                          b)) and not reversedist(
+                                                    c, d, b)) and luneconstraint(c, d,
+                                                                                 b):  # if the point is in the cone, lune and distance constraints
+                                                    if ((quadconstraint(a, b, c) and quadconstraint(a, b, d)) and quadconstraint(c,
+                                                                                                                                 d,
+                                                                                                                                 a)) and quadconstraint(
+                                                        c, d, b):
+                                                        if cross_point not in [a,b,c,d]:
+                                                            if all([termsinlune(a,cross_point,terminals,[a]),termsinlune(b,cross_point,terminals,[b]),termsinlune(c,cross_point,terminals,[c]),termsinlune(d,cross_point,terminals,[d])]):
+                                                                fst_set.append([1, pointdistance(a, b) + pointdistance(c, d), first_branch[6]+second_branch[6],
+                                                                                [[b, cross_point], [a, cross_point], [c, cross_point],
+                                                                                 [d, cross_point]]])
                             else:
                                 new_fst = ReverseMelzak(first_branch,second_branch)
                                 if not any(edge is False for edge in new_fst):
                                     if not any(pointdistance(edge[0],edge[1]) == 0 for edge in new_fst):
-                                        distance_sum = sum(pointdistance(edge[0], edge[1]) for edge in new_fst)
-                                        hyperedge = first_branch[6] + second_branch[6]
-                                        fst_set.append([k_sum,distance_sum,hyperedge,new_fst])
+
+                                        lunesempty = True
+                                        for edge in new_fst:
+                                            if not termsinlune(edge[0],edge[1],terminals,[edge[0],edge[1]]):
+                                                lunesempty = False
+                                                break
+                                            if not lunesempty:
+                                                break
+                                        if lunesempty:
+                                            distance_sum = sum(pointdistance(edge[0], edge[1]) for edge in new_fst)
+                                            hyperedge = first_branch[6] + second_branch[6]
+                                            fst_set.append([k_sum,distance_sum,hyperedge,new_fst])
             if m <= math.ceil(i/3) and i < kk:
                 for q in range(m,max(math.floor((i-m)/2),1)):
                     print(m,q,i-(m+q))
+                    print("Checking ",len(branch_set[m]) * len(branch_set[q]) * len(branch_set[i-(m+q)]))
                     for first_branch in branch_set[m]:
                         for second_branch in branch_set[q]:
                             for third_branch in branch_set[i-(m+q)]:
                                 if len(set([(branch[0],branch[1]) for branch in [first_branch,second_branch,third_branch]])) == 3:
                                     if (not bool(set(first_branch[6]) & set(second_branch[6])) and not bool(set(first_branch[6]) & set(third_branch[6]))) and not bool(set(third_branch[6]) & set(second_branch[6])):
-                                        choices = [first_branch, second_branch, third_branch]
-                                        for choice in choices:
-                                            rest = [x for x in choices if x != choice]
-                                            if IsPointInCone(rest[0],rest[1]) and IsPointInCone(rest[1],rest[0]):
-                                                NPx,NPy = NonPseudoPair(rest[0],rest[1])
-                                                if NPx[:2] not in [choice[:2],choice[3][:2],choice[4][:2]] and NPy[:2] not in [choice[:2],choice[3][:2],choice[4][:2]]:
-                                                    if alpha_ext(choice[3],choice[4],NPx,NPy):
-                                                        if rhombus_ext(choice,NPx,NPy):
-                                                            branch_set[i+1].append(equipoint3(choice,rest[0],rest[1]))
+                                        bordercase = True
+                                        if m == q == 0:
+                                            if boundaryconstraint(first_branch[:2],second_branch[:2],hullboundary) and hull.contains(Point(third_branch[:2])):
+                                                bordercase = False
+                                        if bordercase:
+                                            choices = [first_branch, second_branch, third_branch]
+                                            for choice in choices:
+                                                rest = [x for x in choices if x != choice]
+                                                if IsPointInCone(rest[0],rest[1]) and IsPointInCone(rest[1],rest[0]):
+                                                    NPx,NPy = NonPseudoPair(rest[0],rest[1])
+                                                    #if NPx[:2] not in [choice[:2],choice[3][:2],choice[4][:2]] and NPy[:2] not in [choice[:2],choice[3][:2],choice[4][:2]]:
+                                                    new_choice = choice.copy()
+                                                    new_choice[3],new_choice[4] = IntervalProjectionTest(new_choice,NPx,NPy)
+                                                    tot[0] += 1
+                                                    if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
+                                                        tot[1] += 1
+                                                        eff[0] += 1
+                                                        new_choice[3],new_choice[4] = simple_lune_ext(NPx,NPy,new_choice,terminals)
+                                                        if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
+                                                            eff[1] += 1
+                                                            tot[2] += 1
+                                                            if bottle_ext(NPx, NPy, new_choice, bottleneck):
+                                                                eff[2] += 1
+                                                                tot[3] += 1
+                                                                if rhombus_ext(new_choice,NPx,NPy):
+                                                                    eff[3] += 1
+                                                                    tot[4] += 1
+                                                                    if not conjecture or alpha_ext(new_choice[3], new_choice[4], NPx, NPy):
+                                                                        eff[4] += 1
+                                                                        tot[5] += 1
+                                                                        if triangle_ext(new_choice,NPx,NPy,grid):
+                                                                            eff[5]+=1
+                                                                            part4 += 1
+                                                                            branch_set[i+1].append(equipoint3(new_choice,rest[0],rest[1]))
+    # print("For the branch set, part1 gave ",part1,", part2 gave ",part2,", part3 gave ", part3,", part4 gave ",part4, ". This is a total of",part1+part2+part3+part4)
+    # a = did_it_help*len(branch_set[0])**2
+    # b = (math.comb(n,2)+math.comb(n,3))*len(branch_set[0])**2
+    # print("We saved ", did_it_help, " of ", checking, " with the new test. That's ", 100*did_it_help/checking, "%.")
 
-
+    # for zz in range(len(eff)):
+    #     if tot[zz] > 0:
+    #         print("The efficiency of test ", zz+1, " was ", 100 * (tot[zz] - eff[zz])/tot[zz], "%.")
 
     for FST in fst_set:
         FST[2].sort()
@@ -525,6 +843,7 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
             d[k] = sub
 
     fst_set = list(d.values())
+    print("We ended up with ", len(fst_set), " FST's.")
 
     jae_set = [[i[0] for i in fst_set], [i[1] for i in fst_set], [i[2] for i in fst_set], [i[3] for i in fst_set]]
     jae_counts = [len(x) for x in jae_set]
@@ -556,34 +875,55 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     return terminals, jae_set, times, edge_counts, triple_counts, quad_counts
 
 
-test_inputs = [10] # range(6,51)
+test_inputs = [9] # range(6,9)
 r = 1  # number of repeats
 
-times = []
+ave_times = []
+ave_fst_num = []
+ave_fst_size = []
+ave_steiner_num = []
+ave_deg4_num = []
+
 edge_counts = []
 triple_counts = []
 quad_counts = []
 
+conjecture = False
+plotting = True
 concat = True
 edge_counter = 0
 trip_counter = 0
 quad_counter = 0
 kk = 2  # k in k-Steiner problem
 
+ff = 5 # ff and gg determine grid size when allocating points
+gg = 5
+
 # while quad_counter < 1:
-for i in range(r):
-    for n in test_inputs:
+for n in test_inputs:
+    times = []
+    fst_num = []
+    fst_size = []
+    steiner_num = []
+    deg4_num = []
+    for i in range(r):
         start_time = time.time()
-        # points = [[0.2178343823722475, 0.6553075480213325], [0.02397885385515164, 0.3736109877975905], [0.22702319470594223, 0.528581402882818], [0.8681328526369547, 0.5266025191673622], [0.39504462952946773, 0.6019658472489339], [0.2563355476081923, 0.5447634632428844], [0.7211755647279753, 0.869650908433547], [0.6438781081357572, 0.9556178537720864]]
+        # points = [[0.18446498436120895, 0.6184426848049662], [0.7422285780739769, 0.4993487191609768], [0.8631455231645835, 0.8251268093724332], [0.4009380102563229, 0.8031461010876775], [0.3931722104028642, 0.6783502187212731], [0.09824893476050789, 0.02079242235759937], [0.17177485489259603, 0.5990570312466027], [0.3571847013273092, 0.5702472179180343], [0.2935916581970842, 0.2128390336353453], [0.6649727404964251, 0.2522138247316027], [0.12693630191404293, 0.014546964812771623], [0.3279846173715646, 0.1914429925815503], [0.31873332929656384, 0.5821469962211879], [0.9925885968561867, 0.17811223908656748], [0.24454926199187177, 0.960735795925137], [0.14048726318876914, 0.1670286943044541], [0.4509017304684252, 0.912374171306085], [0.6762776926548817, 0.7129924894912819], [0.9574198952205123, 0.5984408485300361], [0.3874651302791111, 0.0026287991797877552]]
         # terminals = [x + [[], [-1,-1],[-1,-1],0,[points.index(x)]] for x in points]
+        # print(terminals)
         terminals = []
+        grid = [[[] for x in range(gg)] for y in range(ff)]
         for q in range(n):  # randomly generates points, of form (x,y,topology,points at ends of arc,line/arc flag)
             newpoint = [random.random(), random.random(), [], [-1,-1],[-1,-1],0,[q]]
+            gridx,gridy = gridloc(newpoint)
+            newpoint.append([gridx,gridy])
+            grid[gridx][gridy].append(newpoint)
             terminals.append(newpoint)
-        
-        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,kk)
 
-        if r == 1 and len(test_inputs) == 1:
+        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,kk,fst_num)
+
+
+        if (r == 1 and len(test_inputs) == 1) and concat == False:
 
             fig, ax = plt.subplots()
 
@@ -615,6 +955,8 @@ for i in range(r):
 
 
         if concat == True:
+            fst_num.append(len(jae_set[0]))
+            fst_size.append(sum([len(x) for x in jae_set[2]])/len(jae_set[2]))
             n = int(n)
             # number of Steiner points in each hyperedge
             S = jae_set[0]
@@ -732,34 +1074,54 @@ for i in range(r):
                 print(components)
 
             htree = find(xvalues, 1)
-            print(htree)
-            print(iter)
+            print("HTREE IS ", htree)
+            print("ITER IS ", iter)
+            print(S,L,T)
+
+            # number of degree 4 steiner points in fst is t - 2 -s where t = # terminals, s = # steiner points
+
+            steiner_num.append(sum(S[x] for x in htree))
+            deg4_num.append(sum(len(T[x]) - 2 - S[x] for x in htree))
 
             print("--- %s seconds ---" % (time.time() - start_time))
-
+            times.append(time.time() - start_time)
             def count(l):
                 return sum(1 + count(i) for i in l if isinstance(i,list))
 
-            fig, ax = plt.subplots()
+            if plotting == True:
+                fig, ax = plt.subplots()
 
-            for i in range(len(terminals)):
-                ax.annotate(i, (xs[i], ys[i]))
+                xs = [point[0] for point in terminals]  # this part is for plotting the points
+                ys = [point[1] for point in terminals]
 
-            for i in range(len(htree)):
-                a = htree[i]
-                he = topologies[a]
-                c = count(he)
-                if c == 2:
-                    plt.plot([he[0][0], he[1][0]], [he[0][1], he[1][1]], 'r')
-                else:
-                    for j in range(len(he)):
-                        e = he[j]
-                        plt.plot([e[0][0], e[1][0]], [e[0][1], e[1][1]], 'b')
+                for i in range(len(terminals)):
+                    ax.annotate(i, (xs[i], ys[i]))
 
-            plt.xlim([-0.05, 1.05])
-            plt.ylim([-0.05, 1.05])
-            ax.set_aspect('equal')
+                for i in range(len(htree)):
+                    a = htree[i]
+                    he = topologies[a]
+                    c = count(he)
+                    if c == 2:
+                        plt.plot([he[0][0], he[1][0]], [he[0][1], he[1][1]], 'r')
+                    else:
+                        for j in range(len(he)):
+                            e = he[j]
+                            plt.plot([e[0][0], e[1][0]], [e[0][1], e[1][1]], 'b')
 
-            for i in range(n):
-                plt.scatter(terminals[i][0], terminals[i][1], c = 'k')
-            plt.show()
+                plt.xlim([-0.05, 1.05])
+                plt.ylim([-0.05, 1.05])
+                ax.set_aspect('equal')
+
+                for i in range(n):
+                    plt.scatter(terminals[i][0], terminals[i][1], c = 'k')
+                plt.show()
+    ave_times.append(sum(times)/len(times))
+    ave_fst_num.append(sum(fst_num)/len(fst_num))
+    ave_fst_size.append(sum(fst_size)/len(fst_size))
+    ave_steiner_num.append(sum(steiner_num)/len(steiner_num))
+    ave_deg4_num.append(sum(deg4_num) / len(deg4_num))
+print(ave_times)
+print(ave_fst_num)
+print(ave_fst_size)
+print(ave_steiner_num)
+print(ave_deg4_num)
