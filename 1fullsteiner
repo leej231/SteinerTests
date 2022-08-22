@@ -882,6 +882,18 @@ while True:
   except:
     continue
 
+while True:
+  try:
+    kk = int(input("What is k? "))
+    if kk >= 0:
+      print("Entered successfully! ")
+      break
+    else:
+      print("Age should be non-negative")
+  except ValueError:
+    print("Provide a non-negative integer value...")
+    continue
+
 
 
 if rand_check == "R":
@@ -917,7 +929,6 @@ concat = True
 edge_counter = 0
 trip_counter = 0
 quad_counter = 0
-kk = 2  # k in k-Steiner problem
 
 ff = 5 # ff and gg determine grid size when allocating points
 gg = 5
