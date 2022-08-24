@@ -617,8 +617,6 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     branch_set = [[] for x in range(kk+1)]  # general data structure for branches: list with [location,topology,angles]
     branch_set[0].extend(terminals) #index is size of branch minus 1
 
-    did_it_help = 0
-
     g = Graph(n)
 
     for i in range(n):
@@ -703,10 +701,6 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                         if not (boundaryconstraint(a,b, hullboundary) and hull.contains(Point(other[:2]))):
                             branch_set[1].append(equipoint3(other, a,b))
                             part2 += 1
-                        else:
-                            did_it_help += 1
-                    else:
-                        did_it_help += 1
 
 
     # branch_set[1].sort()
@@ -804,35 +798,12 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                                     #if NPx[:2] not in [choice[:2],choice[3][:2],choice[4][:2]] and NPy[:2] not in [choice[:2],choice[3][:2],choice[4][:2]]:
                                                     new_choice = choice.copy()
                                                     new_choice[3],new_choice[4] = IntervalProjectionTest(new_choice,NPx,NPy)
-                                                    tot[0] += 1
                                                     if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
-                                                        tot[1] += 1
-                                                        eff[0] += 1
                                                         new_choice[3],new_choice[4] = simple_lune_ext(NPx,NPy,new_choice,terminals)
                                                         if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
-                                                            eff[1] += 1
-                                                            tot[2] += 1
-                                                            if bottle_ext(NPx, NPy, new_choice, bottleneck):
-                                                                eff[2] += 1
-                                                                tot[3] += 1
-                                                                if rhombus_ext(new_choice,NPx,NPy):
-                                                                    eff[3] += 1
-                                                                    tot[4] += 1
-                                                                    if not conjecture or alpha_ext(new_choice[3], new_choice[4], NPx, NPy):
-                                                                        eff[4] += 1
-                                                                        tot[5] += 1
-                                                                        if triangle_ext(new_choice,NPx,NPy,grid):
-                                                                            eff[5]+=1
+                                                            if (((not bottle_on or bottle_ext(NPx, NPy, new_choice, bottleneck)) and (rhombus_on or rhombus_ext(new_choice,NPx,NPy))) and (not conjecture or alpha_ext(new_choice[3], new_choice[4], NPx, NPy)) )and (not triangle_on or triangle_ext(new_choice,NPx,NPy,grid)):
                                                                             part4 += 1
                                                                             branch_set[i+1].append(equipoint3(new_choice,rest[0],rest[1]))
-    # print("For the branch set, part1 gave ",part1,", part2 gave ",part2,", part3 gave ", part3,", part4 gave ",part4, ". This is a total of",part1+part2+part3+part4)
-    # a = did_it_help*len(branch_set[0])**2
-    # b = (math.comb(n,2)+math.comb(n,3))*len(branch_set[0])**2
-    # print("We saved ", did_it_help, " of ", checking, " with the new test. That's ", 100*did_it_help/checking, "%.")
-
-    # for zz in range(len(eff)):
-    #     if tot[zz] > 0:
-    #         print("The efficiency of test ", zz+1, " was ", 100 * (tot[zz] - eff[zz])/tot[zz], "%.")
 
     for FST in fst_set:
         FST[2].sort()
@@ -863,10 +834,6 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     edge_counter += num_edges
     trip_counter += num_3steiner
     quad_counter += num_4steiner
-
-    # print("The number of terminals was ", test_inputs[0], ". The number of FST's is ", len(fst_set), ". That's ",
-    #       num_edges,
-    #       " edges, ", num_3steiner, " triples, and ", num_4steiner, " quads.")
 
     return terminals, jae_set, times, edge_counts, triple_counts, quad_counts
 
@@ -923,9 +890,15 @@ edge_counts = []
 triple_counts = []
 quad_counts = []
 
+bottle_on = True
+rhombus_on = True
+triangle_on = True
 conjecture = False
+
 plotting = False
 concat = True
+
+
 edge_counter = 0
 trip_counter = 0
 quad_counter = 0
@@ -1113,9 +1086,6 @@ for n in test_inputs:
                 print(components)
 
             htree = find(xvalues, 1)
-            print("HTREE IS ", htree)
-            print("ITER IS ", iter)
-            print(S,L,T)
 
             # number of degree 4 steiner points in fst is t - 2 -s where t = # terminals, s = # steiner points
 
