@@ -306,13 +306,9 @@ def DoConesOverlap(p1,p2):
     if p1[3] == p1[4] == [-1,-1] or p2[3] == p2[4] == [-1,-1]:
         return True
     else:
-        print((p1,p1[3],p2,p2[3]))
         a = findIntersection(p1,p1[3],p2,p2[3])
-        print(p1, p1[3], p2, p2[4])
         b = findIntersection(p1,p1[3],p2,p2[4])
-        print(p1, p1[4], p2, p2[3])
         c = findIntersection(p1, p1[4], p2, p2[3])
-        print(p1,p1[4],p2,p2[4])
         d = findIntersection(p1,p1[4],p2,p2[4])
         first_point = (same_side3(p1,p1[3],a) and same_side3(p2,p2[3],a)) or (same_side3(p1,p1[3],b) and same_side3(p2,p2[4],b))
         second_point = (same_side3(p1,p1[4],c) and same_side3(p2,p2[3],c)) or (same_side3(p1,p1[4],d) and same_side3(p2,p2[4],d))
@@ -518,10 +514,7 @@ def triangle_ext(point,x,y,gridterms): #returns true if triangle is empty, must 
     xmin,xmax,ymin,ymax = gridrange(vertices)
     for xx in range(xmin,xmax+1):
         for yy in range(ymin,ymax+1):
-            # print(xx,yy)
-            # print("current bounds are ",xmin,xmax,ymin,ymax)
             for point in gridterms[xx][yy]:
-                # print(point)
                 if ray_tracing_method(point[0],point[1],vertices) and point[:2] not in vertices:
                     polygonempty = False
                     break
@@ -546,6 +539,54 @@ def bottle_ext(x,y,z,bottleneck):
     else:
         return True
     return distance <= min(bot_dist)
+
+def bisect(z,u,v,centre,radius,x,y):
+    chord_midpoint = [(u[0]+v[0])/2,(u[1]+v[1])/2]
+    projection = findIntersection(centre, chord_midpoint, x, y)
+    bb = circle_line_segment_intersection(centre,radius,centre,projection,False)
+    return(bb[0])
+
+def bottle_full(x,y,z,bottleneck,epsilon): #must fix error - bisector should be finding midpoint on circle!
+    test_check = False
+    prelim_check = bottle_ext(x,y,z,bottleneck)
+    if len(z[2]) != 2 or not prelim_check:
+        return [z[3],z[4]]
+    centre, radius = FindCircle(z[:2], z[2][0], z[2][1])
+    projections = [findIntersection(centre,z[3],x,y),findIntersection(centre,z[4],x,y)]
+    lengths = [pointdistance(z[3],projections[0]),pointdistance(z[4],projections[1])]
+    bot_dist = []
+    for a in z[6]:
+        for b in y[6] + x[6]:
+            bot_dist.append(bottleneck[a][b])
+    threshold_distance = min(bot_dist)
+    min_length = min(lengths)
+    max_length = max(lengths)
+    if max_length <= threshold_distance:
+        return [z[3],z[4]]
+    elif min_length < threshold_distance and max_length > threshold_distance:
+        test_check = True
+        if lengths.index(min_length) == 0:
+            right_bound = z[4]
+            left_bound = z[3]
+        else:
+            right_bound = z[3]
+            left_bound = z[4]
+        starting_bound = left_bound.copy()
+        current_bisect = bisect(z,left_bound,right_bound,centre,radius,x,y)
+        current_dist = pointdistance(current_bisect, findIntersection(centre, current_bisect, x, y)) - threshold_distance
+        while current_dist < 0 or current_dist > epsilon:
+            if current_dist > 0:
+                right_bound = current_bisect
+            else:
+                left_bound = current_bisect
+            current_bisect = bisect(z,left_bound, right_bound,centre,radius,x,y)
+            current_dist = pointdistance(current_bisect, findIntersection(centre, current_bisect, x, y)) - threshold_distance
+        return [starting_bound,current_bisect,test_check]
+    else: # temp return until I understand other case
+        return [z[3],z[4]]
+
+
+
 
 def depth(L):
     if L == []:
@@ -587,7 +628,7 @@ def simple_lune_ext(x,y,z,terms): #to be fixed if x,y interval is vertical
     else:
         return ProjectionToArc(z,ix),ProjectionToArc(z,iy)
 
-def simple_ext_lemma(x,iy,y,z,terminals):
+def simple_ext_lemma(x,iy,y,z,terminals): #horizontal lune test
     xy_gradient = (y[1] -x[1])/(y[0] - x[0])
     points_in_lune = []
     for point in terminals:
@@ -696,13 +737,31 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                     b = pairs[2][1]
                     other = [point for point in combo if point not in pairs[2]][0]
                     checking += 1
-                    # print(pointtolinedistance(a,b,other),min(bottleneck[a[6][0]][other[6][0]],bottleneck[b[6][0]][other[6][0]]))
                     if pointtolinedistance(a,b,other) <= min(bottleneck[a[6][0]][other[6][0]],bottleneck[b[6][0]][other[6][0]]):
                         if not (boundaryconstraint(a,b, hullboundary) and hull.contains(Point(other[:2]))):
                             branch_set[1].append(equipoint3(other, a,b))
                             part2 += 1
 
-
+    # for zz in branch_set[1]:
+    #     if len(zz[2]) == 2:
+    #         aa = bottle_full(branch_set[0][0],branch_set[0][1],zz,bottleneck,0.01)
+    #         if len(aa) > 2:
+    #             tester = [zz,zz[3],zz[4],aa[0],aa[1]]
+    #             fig, ax = plt.subplots()
+    #
+    #             xs = [point[0] for point in tester]  # this part is for plotting the points
+    #             ys = [point[1] for point in tester]
+    #
+    #             for i in range(len(tester)):
+    #                 ax.annotate(i, (xs[i], ys[i]))
+    #
+    #             plt.xlim([-0.05, 1.05])
+    #             plt.ylim([-0.05, 1.05])
+    #             ax.set_aspect('equal')
+    #
+    #             for i in range(len(tester)):
+    #                 plt.scatter(tester[i][0], tester[i][1], c='k')
+    #             plt.show()
     # branch_set[1].sort()
     # branch_set[1] = list(branch_set[1] for branch_set[1], _ in itertools.groupby(branch_set[1]))
     eff = [0,0,0,0,0,0]
@@ -792,6 +851,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                         if bordercase:
                                             choices = [first_branch, second_branch, third_branch]
                                             for choice in choices:
+                                                # if len(choice[2]) > 0:
+                                                #     print("MAYBE")
                                                 rest = [x for x in choices if x != choice]
                                                 if IsPointInCone(rest[0],rest[1]) and IsPointInCone(rest[1],rest[0]):
                                                     NPx,NPy = NonPseudoPair(rest[0],rest[1])
@@ -801,6 +862,7 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                                     if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
                                                         new_choice[3],new_choice[4] = simple_lune_ext(NPx,NPy,new_choice,terminals)
                                                         if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
+                                                            new_choice[3],new_choice[4] = bottle_full(NPx,NPy,new_choice,bottleneck,0.01)
                                                             if (((not bottle_on or bottle_ext(NPx, NPy, new_choice, bottleneck)) and (rhombus_on or rhombus_ext(new_choice,NPx,NPy))) and (not conjecture or alpha_ext(new_choice[3], new_choice[4], NPx, NPy)) )and (not triangle_on or triangle_ext(new_choice,NPx,NPy,grid)):
                                                                             part4 += 1
                                                                             branch_set[i+1].append(equipoint3(new_choice,rest[0],rest[1]))
@@ -856,7 +918,7 @@ while True:
       print("Entered successfully! ")
       break
     else:
-      print("Age should be non-negative")
+      print("k should be non-negative")
   except ValueError:
     print("Provide a non-negative integer value...")
     continue
@@ -895,7 +957,7 @@ rhombus_on = True
 triangle_on = True
 conjecture = False
 
-plotting = False
+plotting = True
 concat = True
 
 
@@ -989,8 +1051,6 @@ for n in test_inputs:
             print(h)
 
             x = milp_model.addVars(h, vtype=GRB.BINARY)
-
-            # print("L is ",L," and x is ", x)
 
             milp_model.setObjective(sum(L[i] * x[i] for i in range(h)), GRB.MINIMIZE)
             c2 = milp_model.addConstr(sum(S[i] * x[i] for i in range(h)) <= kk)
@@ -1097,7 +1157,7 @@ for n in test_inputs:
             def count(l):
                 return sum(1 + count(i) for i in l if isinstance(i,list))
 
-            if plotting == True:
+            if (plotting == True and r == 1) and len(test_inputs) > 1:
                 fig, ax = plt.subplots()
 
                 xs = [point[0] for point in terminals]  # this part is for plotting the points
@@ -1169,3 +1229,4 @@ if r > 1 and len(test_inputs) > 1:
     plt.xlabel('# of terminals')
     plt.ylabel('Average # of Steiner points')
     plt.show()
+
