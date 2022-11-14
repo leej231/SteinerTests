@@ -192,7 +192,8 @@ def termsinlune(x,y,terms,allowed): #returns True if there is no terminal in the
     return lunesempty
 
 def luneconstraint(p1, p2, p3):  # returns true if p3 is inside the lune of p1 and p2
-    return (pointdistance(p3, p2) <= pointdistance(p1, p2)) and (pointdistance(p3, p1) <= pointdistance(p1, p2))
+    xx = pointdistance(p1,p2)
+    return (pointdistance(p3, p2) <= xx) and (pointdistance(p3, p1) <= xx)
 
 def bottleconstraint(list1,stein,terms,bottle):
     terms_short = [x[:2] for x in terms]
@@ -754,11 +755,12 @@ def simple_ext_lemma(x,iy,y,z,terminals): #horizontal lune test
     if len(point_dists) > 0:
         for point in points_in_lune:
             angle = getAngle(y,x,point)
+            x_dist = pointdistance(x,point)
             if 60 <= angle <= 300:
-                point_dists.append(pointdistance(x,point)/2*math.cos(angle))
+                point_dists.append(x_dist/2*math.cos(angle))
                 #don't need to worry which side of angle since cos(360 - angle) = cos(angle)
             else:
-                point_dists.append(pointdistance(x,point))
+                point_dists.append(x_dist)
         min_dist = min(point_dists)
         if y[0] >= x[0]:
             new_iy = [x[0]+math.sqrt(min_dist/(1+xy_gradient**2)),x[1] + xy_gradient*math.sqrt(min_dist/(1+xy_gradient**2))]
@@ -775,7 +777,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
     branch_set[0].extend(terminals) #index is size of branch minus 1
 
     g = Graph(n)
-
+    print(n)
+    print(len(terminals))
     for i in range(n):
         for j in range(i, n):
             g.add_edge(i, j, pointdistance(terminals[i], terminals[j]))
@@ -938,7 +941,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                             else:
                                 new_fst = ReverseMelzak(first_branch,second_branch)
                                 if not any(edge is False for edge in new_fst):
-                                    if not any(pointdistance(edge[0],edge[1]) == 0 for edge in new_fst):
+                                    edge_dists = [pointdistance(edge[0],edge[1]) for edge in new_fst]
+                                    if not any(dist == 0 for dist in edge_dists):
 
                                         lunesempty = True
                                         for edge in new_fst:
@@ -948,7 +952,7 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                             if not lunesempty:
                                                 break
                                         if lunesempty:
-                                            distance_sum = sum(pointdistance(edge[0], edge[1]) for edge in new_fst)
+                                            distance_sum = sum(edge_dists)
                                             hyperedge = first_branch[6] + second_branch[6]
                                             fst_set.append([k_sum,distance_sum,hyperedge,new_fst])
             if m <= math.ceil(i/3) and i < kk:
@@ -977,9 +981,9 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
                                                     new_choice[3],new_choice[4] = IntervalProjectionTest(new_choice,NPx,NPy)
                                                     if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
                                                         new_choice[3],new_choice[4] = simple_lune_ext(NPx,NPy,new_choice,terminals)
-                                                        if new_choice[3] != False: #can make new_params once I add the bit where we project back onto the arc
+                                                        if not bottle_on or new_choice[3] != False:
                                                             new_choice[3],new_choice[4] = bottle_full(NPx,NPy,new_choice,bottleneck,0.01)
-                                                            if (((not bottle_on or bottle_ext(NPx, NPy, new_choice, bottleneck)) and (rhombus_on or rhombus_ext(new_choice,NPx,NPy))) and (not conjecture or alpha_ext(new_choice[3], new_choice[4], NPx, NPy)) )and (not triangle_on or triangle_ext(new_choice,NPx,NPy,grid)):
+                                                            if (not rhombus_on or rhombus_ext(new_choice,NPx,NPy)) and (not conjecture or alpha_ext(new_choice[3], new_choice[4], NPx, NPy)) and (not triangle_on or triangle_ext(new_choice,NPx,NPy,grid)):
                                                                             part4 += 1
                                                                             branch_set[i+1].append(equipoint3(new_choice,rest[0],rest[1]))
 
@@ -1018,8 +1022,8 @@ def OneSteiner(n,terminals,times, edge_counts, triple_counts, quad_counts, edge_
 
 while True:
   try:
-    rand_check = input("Random points (R) or given points (G)? ")
-    if rand_check == "R" or rand_check == "G":
+    rand_check = input("Random points (R), given points (G), or grid-like points (GL)? ")
+    if rand_check == "R" or rand_check == "G" or rand_check == "GL":
       print("Entered successfully!")
       break
     else:
@@ -1041,12 +1045,14 @@ while True:
 
 
 
-if rand_check == "R":
+if rand_check == "R" or rand_check == "GL":
     aa = int(input("Start of range? "))
     bb = int(input("End of range? ")) + 1
     r = int(input("Number of repeats? "))
 
     test_inputs = range(aa,bb)
+    if rand_check == "GL":
+        perturb = float(input("How big a perturbation (0.0-1.0)? "))
 elif rand_check == "G":
     filename = input("What is the filename (including extension)? ")
 
@@ -1096,12 +1102,41 @@ for n in test_inputs:
         if rand_check == "G":
             terminals = [x + [[], [-1,-1],[-1,-1],0,[points.index(x)]] for x in points]
             print(terminals)
-        if rand_check == "R":
+        elif rand_check == "R":
             terminals = []
             for q in range(n):  # randomly generates points, of form (x,y,topology,points at ends of arc,line/arc flag)
                 newpoint = [random.random(), random.random(), [], [-1,-1],[-1,-1],0,[q]]
                 terminals.append(newpoint)
+        else:
+            if math.floor(math.sqrt(n)) ** 2 == n:
+                qq = int(math.sqrt(n))
+                rr = int(math.sqrt(n))
+            else:
+                root = math.sqrt(n)
+                qq = int(math.floor(root)) + 1
+                rr = qq
 
+            points = []
+            count = 0
+            for ii in range(qq):
+                for jj in range(rr):
+                    count += 1
+                    point = [jj / (qq - 1), ii / (rr - 1)]
+                    for xx in range(2):
+                        if point[xx] < perturb:
+                            point[xx] = point[xx] + random.uniform(-point[xx], perturb)
+                        elif point[xx] > 1 - perturb:
+                            point[xx] = point[xx] + random.uniform(-perturb, 1 - point[xx])
+                        else:
+                            point[xx] = point[xx] + random.uniform(-perturb, perturb)
+                    points.append(point)
+                    if count == n:
+                        break
+                else:
+                    continue
+                break
+            terminals = [x + [[], [-1, -1], [-1, -1], 0, [points.index(x)]] for x in points]
+            print(terminals)
         grid = [[[] for x in range(gg)] for y in range(ff)]
 
         for point in terminals:
@@ -1273,7 +1308,7 @@ for n in test_inputs:
             def count(l):
                 return sum(1 + count(i) for i in l if isinstance(i,list))
 
-            if (plotting == True and r == 1) and len(test_inputs) > 1:
+            if (plotting == True and r == 1) and len(test_inputs) == 1:
                 fig, ax = plt.subplots()
 
                 xs = [point[0] for point in terminals]  # this part is for plotting the points
@@ -1306,11 +1341,11 @@ for n in test_inputs:
     ave_fst_size.append(sum(fst_size)/len(fst_size))
     ave_steiner_num.append(sum(steiner_num)/len(steiner_num))
     ave_deg4_num.append(sum(deg4_num) / len(deg4_num))
-print(ave_times)
-print(ave_fst_num)
-print(ave_fst_size)
-print(ave_steiner_num)
-print(ave_deg4_num)
+    print(ave_times)
+    print(ave_fst_num)
+    print(ave_fst_size)
+    print(ave_steiner_num)
+    print(ave_deg4_num)
 
 
 
