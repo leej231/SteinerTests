@@ -848,7 +848,7 @@ def simple_ext_lemma(x, iy, y, z, terminals):  # horizontal lune test
     return new_iy, min_dist
 
 
-def OneSteiner(n, terminals, times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,
+def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,
                kk, fst_size):
     branch_set = [[] for x in
                   range(kk + 1)]  # general data structure for branches: list with [location,topology,angles]
@@ -859,14 +859,14 @@ def OneSteiner(n, terminals, times, edge_counts, triple_counts, quad_counts, edg
         for j in range(i, n):
             g.add_edge(i, j, point_distance(terminals[i], terminals[j]))
 
-    cleanlist = g.kruskal()
+    clean_list = g.kruskal()
 
     bottleneck = [[0] * n for i in range(n)]
     components = [[x] for x in range(n)]
 
-    ordered_cleanlist = sorted(cleanlist, key=lambda edge: edge[2])
+    ordered_clean_list = sorted(clean_list, key=lambda edge: edge[2])
 
-    for edge in ordered_cleanlist:
+    for edge in ordered_clean_list:
         for part in components:
             if edge[0] in part:
                 comp1 = part
@@ -883,7 +883,7 @@ def OneSteiner(n, terminals, times, edge_counts, triple_counts, quad_counts, edg
 
     fst_set = [[0, point_distance(terminals[i], terminals[j]), [i, j], [terminals[i][:2], terminals[j][:2]]] for
                [i, j, w] in
-               cleanlist]  # first element of list is number of steiner points, second is length
+               clean_list]  # first element of list is number of steiner points, second is length
     part1 = 0
     part2 = 0
     part3 = 0
@@ -1138,9 +1138,10 @@ while True:
 if rand_check == "R" or rand_check == "GL":
     aa = int(input("Start of range? "))
     bb = int(input("End of range? ")) + 1
+    cc = int(input("What is the step size? "))
     r = int(input("Number of repeats? "))
 
-    test_inputs = range(aa, bb)
+    test_inputs = range(aa, bb,cc)
     if rand_check == "GL":
         perturb = float(input("How big a perturbation (0.0-1.0)? "))
 elif rand_check == "G":
@@ -1225,7 +1226,6 @@ for n in test_inputs:
                     continue
                 break
             terminals = [x + [[], [-1, -1], [-1, -1], 0, [points.index(x)]] for x in points]
-            print(terminals)
         grid = [[[] for x in range(gg)] for y in range(ff)]
 
         for point in terminals:
@@ -1233,7 +1233,7 @@ for n in test_inputs:
             point.append([gridx, gridy])
             grid[gridx][gridy].append(point)
 
-        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = OneSteiner(n, terminals, times,
+        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = One_Steiner(n, terminals, times,
                                                                                         edge_counts, triple_counts,
                                                                                         quad_counts, edge_counter,
                                                                                         trip_counter, quad_counter, kk,
