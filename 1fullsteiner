@@ -725,7 +725,7 @@ def bottle_full(x, y, z, bottleneck, epsilon):
         return [z[3], z[4]]
     elif min_length < threshold_distance and max_length > threshold_distance:
         return one_side_bottleneck(z, z[3], z[4], x, y, threshold_distance, epsilon)
-    else:  # 
+    else:  #
         close_point = closest_point_on_line(x, y, z)
         line_dist = point_distance(z, close_point)
         new_u, new_v = bottleneck_bound(z, z[3], z[4], x, y, centre, radius, threshold_distance, line_dist, epsilon)
@@ -1138,7 +1138,10 @@ while True:
 if rand_check == "R" or rand_check == "GL":
     aa = int(input("Start of range? "))
     bb = int(input("End of range? ")) + 1
-    cc = int(input("What is the step size? "))
+    if aa -bb > 0:
+        cc = int(input("What is the step size? "))
+    else:
+        cc = 1
     r = int(input("Number of repeats? "))
 
     test_inputs = range(aa, bb,cc)
@@ -1446,7 +1449,7 @@ if r > 1 and len(test_inputs) > 1:
     full_results = [ave_times, ave_fst_num, ave_fst_size, ave_steiner_num, ave_deg4_num]
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    with open('graphsteiner%s_%s_%s.txt' % (test_inputs[0], test_inputs[-1], timestr), 'w+') as file:
+    with open('%s_graphsteiner%s_%s_%s.txt' % (rand_check,test_inputs[0], test_inputs[-1], timestr), 'w+') as file:
         file.writelines([str(line) + "\n" for line in full_results])
 
     w = test_inputs
