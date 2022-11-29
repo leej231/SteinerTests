@@ -1137,14 +1137,13 @@ while True:
 
 if rand_check == "R" or rand_check == "GL":
     aa = int(input("Start of range? "))
-    bb = int(input("End of range? ")) + 1
-    if aa -bb > 0:
+    bb = int(input("End of range? "))
+    if bb - aa > 0:
         cc = int(input("What is the step size? "))
     else:
         cc = 1
     r = int(input("Number of repeats? "))
-
-    test_inputs = range(aa, bb,cc)
+    test_inputs = range(aa, bb+cc,cc)
     if rand_check == "GL":
         perturb = float(input("How big a perturbation (0.0-1.0)? "))
 elif rand_check == "G":
@@ -1445,7 +1444,7 @@ for n in test_inputs:
     print(ave_steiner_num)
     print(ave_deg4_num)
 
-if r > 1 and len(test_inputs) > 1:
+if r >= 1 and len(test_inputs) > 1:
     full_results = [ave_times, ave_fst_num, ave_fst_size, ave_steiner_num, ave_deg4_num]
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
