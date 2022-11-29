@@ -1307,7 +1307,7 @@ for n in test_inputs:
                 xvalues[i] = x[i].x
 
             print("Number of iterations is " + str(iter))
-            print("Number of cut-constraints implemented is " + str(cutno) + " out of a possible " + str(2 ** (n - 1)))
+            print("Number of cut-constraints implemented is " + str(cutno) + " out of a possible " + str(2**(n-1)-1))
             components = [i for i in range(n)]
 
             hypertree = find(xvalues, 1)
@@ -1338,7 +1338,7 @@ for n in test_inputs:
                 if noofcomps == 2:
                     # labels of different components
                     dfjeqns = np.zeros((1, h), dtype=int)
-                    cutno = cutno + 2
+                    cutno = cutno + 1
 
                     for i in range(h):
                         currenth = T[i]
@@ -1384,7 +1384,7 @@ for n in test_inputs:
                     xvalues[i] = x[i].x
 
                 print("Number of iterations is " + str(iter))
-                print("Number of cut-constraints implemented is " + str(cutno) + " out of a possible " + str(2**(n-1)))
+                print("Number of cut-constraints implemented is " + str(cutno) + " out of a possible " + str(2**(n-1)-1))
                 components = [i for i in range(n)]
 
 
