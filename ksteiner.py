@@ -847,6 +847,83 @@ def simple_ext_lemma(x, iy, y, z, terminals):  # horizontal lune test
         min_dist = 0
     return new_iy, min_dist
 
+def TriangleContains(p1,p2,p3,points):
+    interior = []
+    for x in points:
+        if x not in [p1,p2,p3]:
+            if ray_tracing_method(x[0],x[1],[p1,p2,p3]):
+                test_point = Point(x)
+                line1 = LineString([p1, p2])
+                line2 = LineString([p1, p3])
+                line3 = LineString([p2, p3])
+
+                if (not line1.distance(test_point) < 1e-8 and not line2.distance(test_point) < 1e-8) and not line3.distance(test_point) < 1e-8:
+                    interior.append(x)
+    return interior
+
+
+def ApexCollection(z,u,v,x,y,terms,centre,radius): # u is whichever side you're starting at
+    terms_by_apex = []
+    for t in terms:
+        if t not in [u,v,x,y]:
+            attempt_list = []
+            a = circle_line_segment_intersection(centre, radius, x, t)
+            b = circle_line_segment_intersection(centre, radius, y, t)
+            print(a,b)
+            for item in [a,b]:
+                if len(item) > 0:
+                    attempt_list.append(item)
+            if len(attempt_list) > 0:
+                for item in attempt_list:
+                    if len(item) > 1:
+                        for point in item:
+                            if is_point_on_arc(z,u,v,centre,point) and point not in terms_by_apex:
+                                terms_by_apex.append(list(point))
+                    else:
+                        if is_point_on_arc(z,u,v,centre,item) and item not in terms_by_apex:
+                            terms_by_apex.append(list(item))
+    terms_by_apex.sort(key=lambda item: pointdistance(u,findIntersection(u,v,item,centre)))
+    return(terms_by_apex)
+
+def first_and_last_empty_triangle(u,v,x,y,rel_terms,apexes):
+    full_testers = [u]+apexes+[v]
+    successes = []
+    for apex in full_testers:
+        if len(TriangleContains(apex, x, y, rel_terms)) == 0:
+            successes.append(apex)
+    if len(successes) > 0:
+        return [successes[0],successes[-1]]
+    else:
+        return False, False
+
+def is_point_on_arc(z_point,u,v, centre, point_in_question):  # checks if point in question is in cone of z_point
+    return same_side(centre, point_in_question,z_point,u) and same_side(centre, point_in_question,z_point,v)
+
+def iterated_triangle(x,y,z,terms):
+    uu = z[3][:2]
+    vv = z[4][:2]
+    zz = z[:2]
+    xx = x[:2]
+    yy = y[:2]
+
+    if len(z[2]) != 2:
+        return uu,vv
+    else:
+        centre1, radius1 = FindCircle(uu, vv, zz)
+
+        relevant_terminals = []
+
+        hull = MultiPoint([uu,vv,xx,yy]).convex_hull
+
+        for terminal in terms:
+            if hull.contains(Point(terminal[:2])):
+                relevant_terminals.append(terminal)
+
+        apexes_on_curve = ApexCollection(zz, uu, vv, xx, yy, relevant_terminals, centre1, radius1)
+
+        apexes_found = first_and_last_empty_triangle(uu, vv, xx, yy, relevant_terminals, apexes_on_curve)
+
+        return apexes_found[0],apexes_found[1]
 
 def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,
                kk, fst_size):
@@ -1074,9 +1151,12 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                                                                                 NPy)) and (
                                                                     not triangle_on or triangle_ext(new_choice, NPx,
                                                                                                     NPy, grid)):
-                                                                part4 += 1
-                                                                branch_set[i + 1].append(
-                                                                    equipoint3(new_choice, rest[0], rest[1]))
+                                                                if not triangle_on:
+                                                                    new_choice[3], new_choice[4] = iterated_triangle(NPx,NPy,new_choice,terminals)
+                                                                if new_choice[3] != False:
+                                                                    part4 += 1
+                                                                    branch_set[i + 1].append(
+                                                                        equipoint3(new_choice, rest[0], rest[1]))
 
     for FST in fst_set:
         FST[2].sort()
