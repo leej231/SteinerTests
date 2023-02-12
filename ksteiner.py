@@ -161,8 +161,10 @@ def equipoint3(p1, p2, p3):
         return [p1[0], p1[1], [p1, p2, p3], p2[:2], p3[:2], p1[5] + p2[5] + p3[5] + 1,
                 p1[6] + p2[6] + p3[6]]  # note final addition is a list addition
     else:
-        new_params = IntervalProjectionTest(p1, p2, p3)
-        return [p1[0], p1[1], [p1, p2, p3], new_params[0], new_params[1], p1[5] + p2[5] + p3[5] + 1,
+        print(p1,p2,p3)
+        new_param1 = find_intersection(p1[:2],p1[3][:2],p2[:2],p3[:2])
+        new_param2 = find_intersection(p1[:2], p1[4][:2], p2[:2], p3[:2])
+        return [p1[0], p1[1], [p1, p2, p3], new_param1, new_param2, p1[5] + p2[5] + p3[5] + 1,
                 p1[6] + p2[6] + p3[6]]  # note final addition is a list addition
 
 
@@ -298,10 +300,13 @@ def find_terminals(list1):
 
 def ProjectionToArc(z, proj):
     if len(z[2]) == 2:
-        return [point for point in ArcLineInter(z, proj, z) if point != z][0]
+        attempt_list = []
+        centre, radius = find_circle(z, z[3], z[4])
+        a = circle_line_segment_intersection(centre, radius, proj[:2], z[:2])
+        b = sorted(a, key=lambda val: point_distance(val, z))
+        return(b[-1])
     else:
         return find_intersection(z, proj, z[2][1], z[2][2])
-
 
 def is_point_in_cone(eqpoint1, eqpoint2):  # checks if eqpoint2 is in cone of eqpoint1
     if eqpoint1[3] == eqpoint1[4] == [-1, -1]:  # dummy locations for order-0 pseudoterminals
@@ -352,14 +357,14 @@ def IntervalProjectionTest(point, x,
         return False, False
     elif not point1inside and point2inside:
         if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
-            return x, point[4]
+            return ProjectionToArc(point,x), point[4]
         else:
-            return y, point[4]
+            return ProjectionToArc(point,y),point[4]
     else:
         if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
-            return point[3], x
+            return point[3], ProjectionToArc(point,x)
         else:
-            return point[3], y
+            return point[3], ProjectionToArc(point,y)
 
 
 def DoConesOverlap(p1, p2):
@@ -623,7 +628,7 @@ def bottle_ext(x, y, z, bottleneck):
     return distance <= min(bot_dist)
 
 
-def bisect(z, u, v, centre, radius, x, y):
+def bisect(u, v, centre, radius, x, y):
     chord_midpoint = [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2]
     projection = find_intersection(centre, chord_midpoint, x, y)
     bb = circle_line_segment_intersection(centre, radius, centre, projection, False)
@@ -659,14 +664,14 @@ def one_side_bottleneck(z, u, v, x, y, threshold_distance, epsilon):
         right_bound = u
         left_bound = v
     starting_bound = list(left_bound).copy()
-    current_bisect = bisect(z, left_bound, right_bound, centre, radius, x, y)
+    current_bisect = bisect(left_bound, right_bound, centre, radius, x, y)
     current_dist = point_distance(current_bisect, find_intersection(z, current_bisect, x, y)) - threshold_distance
     while current_dist < 0 or current_dist > epsilon:
         if current_dist > 0:
             right_bound = current_bisect
         else:
             left_bound = current_bisect
-        current_bisect = bisect(z, left_bound, right_bound, centre, radius, x, y)
+        current_bisect = bisect(left_bound, right_bound, centre, radius, x, y)
         current_dist = point_distance(current_bisect,
                                      find_intersection(z, current_bisect, x, y)) - threshold_distance
     print(current_dist)
@@ -688,7 +693,7 @@ def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, eps
         print("TYPE 1", current_upper_dist, current_lower_dist)
         return [p2, p3]
     else:
-        current_bisect = bisect(p1, p2, p3, centre, radius, p4, p5)
+        current_bisect = bisect(p2, p3, centre, radius, p4, p5)
         current_dist = point_distance(current_bisect, find_intersection(p1, current_bisect, p4, p5))
         if current_dist < bound:
             print("TYPE 2a", current_upper_dist, current_lower_dist)
@@ -800,8 +805,7 @@ def boundary_constraint(p1, p2, hull_bound):
 def simple_lune_ext(x, y, z, terms):  # to be fixed if x,y interval is vertical
     if z[3] == z[4] == [-1, -1]:
         return z[3], z[4]
-    poss1 = find_intersection(x, y, z, z[
-        3])  # note we already know that projections of u and v give us an interval equal to or in xy
+    poss1 = find_intersection(x, y, z, z[3])  # note we already know that projections of u and v give us an interval equal to or in xy
     poss2 = find_intersection(x, y, z, z[4])
     dist1 = point_distance(poss1, x)
     dist2 = point_distance(poss2, x)
@@ -867,21 +871,25 @@ def ApexCollection(z,u,v,x,y,terms,centre,radius): # u is whichever side you're 
     for t in terms:
         if t not in [u,v,x,y]:
             attempt_list = []
-            a = circle_line_segment_intersection(centre, radius, x, t)
-            b = circle_line_segment_intersection(centre, radius, y, t)
-            print(a,b)
-            for item in [a,b]:
-                if len(item) > 0:
-                    attempt_list.append(item)
+            if len(z[2]) == 2:
+                a = circle_line_segment_intersection(centre, radius, x, t)
+                b = circle_line_segment_intersection(centre, radius, y, t)
+                print(a,b)
+                if len(a) > 0:
+                    for item in a:
+                        attempt_list.append(item)
+                if len(b) > 0:
+                    for item in b:
+                        attempt_list.append(item)
+            else:
+                a = findIntersection(u,v,x,t)
+                b = findIntersection(u, v, y, t)
+                attempt_list.append(findIntersection(u,v,x,t))
+                attempt_list.append(findIntersection(u, v, y, t ))
             if len(attempt_list) > 0:
                 for item in attempt_list:
-                    if len(item) > 1:
-                        for point in item:
-                            if is_point_on_arc(z,u,v,centre,point) and point not in terms_by_apex:
-                                terms_by_apex.append(list(point))
-                    else:
-                        if is_point_on_arc(z,u,v,centre,item) and item not in terms_by_apex:
-                            terms_by_apex.append(list(item))
+                    if is_point_on_arc(z,u,v,centre,item) and item not in terms_by_apex:
+                        terms_by_apex.append(list(item))
     terms_by_apex.sort(key=lambda item: pointdistance(u,findIntersection(u,v,item,centre)))
     return(terms_by_apex)
 
