@@ -161,7 +161,6 @@ def equipoint3(p1, p2, p3):
         return [p1[0], p1[1], [p1, p2, p3], p2[:2], p3[:2], p1[5] + p2[5] + p3[5] + 1,
                 p1[6] + p2[6] + p3[6]]  # note final addition is a list addition
     else:
-        print(p1,p2,p3)
         new_param1 = find_intersection(p1[:2],p1[3][:2],p2[:2],p3[:2])
         new_param2 = find_intersection(p1[:2], p1[4][:2], p2[:2], p3[:2])
         return [p1[0], p1[1], [p1, p2, p3], new_param1, new_param2, p1[5] + p2[5] + p3[5] + 1,
@@ -300,9 +299,8 @@ def find_terminals(list1):
 
 def ProjectionToArc(z, proj):
     if len(z[2]) == 2:
-        attempt_list = []
         centre, radius = find_circle(z, z[3], z[4])
-        a = circle_line_segment_intersection(centre, radius, proj[:2], z[:2])
+        a = circle_line_segment_intersection(centre, radius, proj[:2], z[:2],full_line=True)
         b = sorted(a, key=lambda val: point_distance(val, z))
         return(b[-1])
     else:
@@ -328,43 +326,87 @@ def is_point_in_cone(eqpoint1, eqpoint2):  # checks if eqpoint2 is in cone of eq
         else:
             return angle_to_base1 < angle_to_point < angle_to_base2 or angle_to_base2 < angle_to_point < angle_to_base1
 
+def is_point_on_interval(point,x,y): # is point on interval xy
+    epsilon = 1e-8
+    return -epsilon < point_distance(x, point) + point_distance(point,y) - point_distance(x,y) < epsilon
+
 
 def IntervalProjectionTest(point, x,
                            y):  # returns false if interval not in cone, otherwise returns new arc/line endpoints
-    if point[3] == point[4] == [-1, -1]:  # dummy locations for order-0 pseudoterminals
-        return point[3], point[4]
-    angle_to_point1 = find_angle(point, point[3])
-    angle_to_point2 = find_angle(point, point[4])
-    angle_to_base1 = find_angle(point, x)
-    angle_to_base2 = find_angle(point, y)
-    if angle_to_base1 <= -120 and angle_to_base2 >= 120:
-        angle_to_base1 += 360
-        if angle_to_point1 <= 120:
-            angle_to_point1 += 360
-        if angle_to_point2 <= 120:
-            angle_to_point2 += 360
-    elif angle_to_base2 <= -120 and angle_to_base1 >= 120:
-        angle_to_base2 += 360
-        if angle_to_point1 <= 120:
-            angle_to_point1 += 360
-        if angle_to_point2 <= 120:
-            angle_to_point2 += 360
-    point1inside = (angle_to_base1 <= angle_to_point1 <= angle_to_base2) or (angle_to_base2 <= angle_to_point1 <= angle_to_base1)
-    point2inside = (angle_to_base1 <= angle_to_point2 <= angle_to_base2) or (angle_to_base2 <= angle_to_point2 <= angle_to_base1)
-    if point1inside and point2inside:
-        return point[3], point[4]
-    elif not point1inside and not point2inside:
-        return False, False
-    elif not point1inside and point2inside:
-        if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
-            return ProjectionToArc(point,x), point[4]
+    z = point[:2]
+    u = point[3]
+    v = point[4]
+    if u == v == [-1, -1]:  # dummy locations for order-0 pseudoterminals
+        return u,v
+
+    centre,radius = find_circle(point[:2],point[3],point[4])
+    x_in_zuv_cone = same_side(centre,x,z,u) and same_side(centre,x,z,v)
+    y_in_zuv_cone = same_side(centre,y,z,u) and same_side(centre,y,z,v)
+    is_u_in_xy_cone = same_side(u,x,z,y) and same_side(u,y,z,x)
+    if not x_in_zuv_cone and not y_in_zuv_cone:
+        #checking if u is between z and projection of u from z (i.e. that the projection is on the right side) up to a given tolerance
+        proj_u = find_intersection(z,u,x,y)
+        proj_v = find_intersection(z,v,x,y)
+        if is_point_on_interval(u,z,proj_u) and is_point_on_interval(proj_u,x,y) and is_point_on_interval(proj_v,x,y):
+            return u,v
         else:
-            return ProjectionToArc(point,y),point[4]
+            return False,False
+    elif x_in_zuv_cone and not y_in_zuv_cone:
+        if is_u_in_xy_cone:
+            return ProjectionToArc(point, x),u
+        else:
+            return ProjectionToArc(point, x),v
+    elif not x_in_zuv_cone and y_in_zuv_cone:
+        if is_u_in_xy_cone:
+            return ProjectionToArc(point, y),u
+        else:
+            return ProjectionToArc(point, y),v
     else:
-        if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
-            return point[3], ProjectionToArc(point,x)
-        else:
-            return point[3], ProjectionToArc(point,y)
+        return ProjectionToArc(point, x),ProjectionToArc(point, y)
+    # return same_side(centre, point_in_question,z_point,u) and same_side(centre, point_in_question,z_point,v)
+    #
+    #
+    #
+    # angle_to_point1 = find_angle(point, point[3])
+    # angle_to_point2 = find_angle(point, point[4])
+    # angle_to_base1 = find_angle(point, x)
+    # angle_to_base2 = find_angle(point, y)
+    # if angle_to_base1 <= -120 and angle_to_base2 >= 120:
+    #     angle_to_base1 += 360
+    #     if angle_to_point1 <= 120:
+    #         angle_to_point1 += 360
+    #     if angle_to_point2 <= 120:
+    #         angle_to_point2 += 360
+    # elif angle_to_base2 <= -120 and angle_to_base1 >= 120:
+    #     angle_to_base2 += 360
+    #     if angle_to_point1 <= 120:
+    #         angle_to_point1 += 360
+    #     if angle_to_point2 <= 120:
+    #         angle_to_point2 += 360
+    # point1inside = (angle_to_base1 <= angle_to_point1 <= angle_to_base2) or (angle_to_base2 <= angle_to_point1 <= angle_to_base1)
+    # point2inside = (angle_to_base1 <= angle_to_point2 <= angle_to_base2) or (angle_to_base2 <= angle_to_point2 <= angle_to_base1)
+    # if point1inside and point2inside:
+    #     print("ERROR2")
+    #     return point[3], point[4]
+    # elif not point1inside and not point2inside:
+    #     print("ERROR3")
+    #     return False, False
+    # elif not point1inside and point2inside:
+    #     if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
+    #         print("ERROR4")
+    #         return ProjectionToArc(point,x), point[4]
+    #     else:
+    #         print("ERROR5")
+    #         print("proj is ",ProjectionToArc(point,y))
+    #         print("other is ",point[4])
+    #         return ProjectionToArc(point,y),point[4]
+    # else:
+    #     if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
+    #         print("ERROR6")
+    #         return point[3], ProjectionToArc(point,x)
+    #     else:
+    #         print("ERROR7")
+    #         return point[3], ProjectionToArc(point,y)
 
 
 def DoConesOverlap(p1, p2):
@@ -674,7 +716,6 @@ def one_side_bottleneck(z, u, v, x, y, threshold_distance, epsilon):
         current_bisect = bisect(left_bound, right_bound, centre, radius, x, y)
         current_dist = point_distance(current_bisect,
                                      find_intersection(z, current_bisect, x, y)) - threshold_distance
-    print(current_dist)
     return starting_bound, current_bisect
 
 
@@ -690,24 +731,20 @@ def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, eps
     if (0 <= current_lower_dist <= epsilon):
         lower_close = True
     if upper_close and lower_close:
-        print("TYPE 1", current_upper_dist, current_lower_dist)
         return [p2, p3]
     else:
         current_bisect = bisect(p2, p3, centre, radius, p4, p5)
         current_dist = point_distance(current_bisect, find_intersection(p1, current_bisect, p4, p5))
         if current_dist < bound:
-            print("TYPE 2a", current_upper_dist, current_lower_dist)
             new_upper = one_side_bottleneck(p1, current_bisect, p3, p4, p5, bound, epsilon)[1]
             new_lower = one_side_bottleneck(p1, p2, current_bisect, p4, p5, bound, epsilon)[1]
             return [new_upper, new_lower]
         else:
             deriv = circ_derivative(centre, radius, current_bisect, base_length)
             if deriv >= 0:
-                print("TYPE 2b", current_upper_dist, current_lower_dist, deriv)
                 return bottleneck_bound(p1, p2, current_bisect, p4, p5, centre, radius, bound,
                                         base_length, epsilon)
             else:
-                print("TYPE 2c", current_upper_dist, current_lower_dist, deriv)
                 return bottleneck_bound(p1, current_bisect, p3, p4, p5, centre, radius, bound,
                                         base_length, epsilon)
 
@@ -799,7 +836,7 @@ def melzak_check(point1, point2):  # returns false if Melzak will have an error 
 
 
 def boundary_constraint(p1, p2, hull_bound):
-    return hull_bound.contains(Point(p1)) and hull_bound.contains(Point(p2))
+    return hull_bound.contains(Point(p1[:2])) and hull_bound.contains(Point(p2[:2]))
 
 
 def simple_lune_ext(x, y, z, terms):  # to be fixed if x,y interval is vertical
@@ -874,7 +911,6 @@ def ApexCollection(z,u,v,x,y,terms,centre,radius): # u is whichever side you're 
             if len(z[2]) == 2:
                 a = circle_line_segment_intersection(centre, radius, x, t)
                 b = circle_line_segment_intersection(centre, radius, y, t)
-                print(a,b)
                 if len(a) > 0:
                     for item in a:
                         attempt_list.append(item)
@@ -890,7 +926,7 @@ def ApexCollection(z,u,v,x,y,terms,centre,radius): # u is whichever side you're 
                 for item in attempt_list:
                     if is_point_on_arc(z,u,v,centre,item) and item not in terms_by_apex:
                         terms_by_apex.append(list(item))
-    terms_by_apex.sort(key=lambda item: pointdistance(u,findIntersection(u,v,item,centre)))
+    terms_by_apex.sort(key=lambda item: point_distance(u,findIntersection(u,v,item,centre)))
     return(terms_by_apex)
 
 def first_and_last_empty_triangle(u,v,x,y,rel_terms,apexes):
@@ -917,7 +953,7 @@ def iterated_triangle(x,y,z,terms):
     if len(z[2]) != 2:
         return uu,vv
     else:
-        centre1, radius1 = FindCircle(uu, vv, zz)
+        centre1, radius1 = find_circle(uu, vv, zz)
 
         relevant_terminals = []
 
@@ -1171,7 +1207,6 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
 
     d = {}  # removing fst's if there exists an fst on the same terminals with same or smaller length.
     for sub in fst_set:
-        print()
         k = tuple([sub[0],tuple(sub[2])])
         if k not in d or sub[1] < d[k][1]:
             d[k] = sub
@@ -1284,9 +1319,14 @@ for n in test_inputs:
             print(terminals)
         elif rand_check == "R":
             terminals = []
+            just_terminals = []
             for q in range(n):  # randomly generates points, of form (x,y,topology,points at ends of arc,line/arc flag)
                 newpoint = [random.random(), random.random(), [], [-1, -1], [-1, -1], 0, [q]]
+                just_terminals.append(newpoint[:2])
                 terminals.append(newpoint)
+            with open('errorcheck%s.txt' % (r),
+                      'w') as file:
+                file.writelines([str(item) for item in [just_terminals]])
         else:
             if math.floor(math.sqrt(n)) ** 2 == n:
                 qq = int(math.sqrt(n))
