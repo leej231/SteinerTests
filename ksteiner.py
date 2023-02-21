@@ -719,7 +719,8 @@ def one_side_bottleneck(z, u, v, x, y, threshold_distance, epsilon):
     return starting_bound, current_bisect
 
 
-def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, epsilon):
+def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, epsilon,recur_checker):
+    recur_checker += 1
     proj1 = find_intersection(p1, p2, p4, p5)
     proj2 = find_intersection(p1, p3, p4, p5)
     current_lower_dist = point_distance(p2, proj1) - bound
@@ -740,13 +741,15 @@ def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, eps
             new_lower = one_side_bottleneck(p1, p2, current_bisect, p4, p5, bound, epsilon)[1]
             return [new_upper, new_lower]
         else:
+            if recur_checker > 10:
+                return [new_upper, new_lower]
             deriv = circ_derivative(centre, radius, current_bisect, base_length)
             if deriv >= 0:
                 return bottleneck_bound(p1, p2, current_bisect, p4, p5, centre, radius, bound,
-                                        base_length, epsilon)
+                                        base_length, epsilon,recur_checker)
             else:
                 return bottleneck_bound(p1, current_bisect, p3, p4, p5, centre, radius, bound,
-                                        base_length, epsilon)
+                                        base_length, epsilon,recur_checker)
 
 
 def bottle_full(x, y, z, bottleneck, epsilon):
@@ -770,7 +773,8 @@ def bottle_full(x, y, z, bottleneck, epsilon):
     else:  #
         close_point = closest_point_on_line(x, y, z)
         line_dist = point_distance(z, close_point)
-        new_u, new_v = bottleneck_bound(z, z[3], z[4], x, y, centre, radius, threshold_distance, line_dist, epsilon)
+        rec_check = 0
+        new_u, new_v = bottleneck_bound(z, z[3], z[4], x, y, centre, radius, threshold_distance, line_dist, epsilon,rec_check)
         return find_new_relocate(z, z[3], z[4], x, y, new_u, new_v)
 
 
