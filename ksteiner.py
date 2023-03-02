@@ -7,7 +7,7 @@ import random
 import time
 import numpy as np
 from itertools import combinations
-from shapely.geometry import Point, MultiPoint
+from shapely.geometry import Point, MultiPoint, LineString
 from shapely.geometry.polygon import LinearRing
 
 
@@ -363,50 +363,6 @@ def IntervalProjectionTest(point, x,
             return ProjectionToArc(point, y),v
     else:
         return ProjectionToArc(point, x),ProjectionToArc(point, y)
-    # return same_side(centre, point_in_question,z_point,u) and same_side(centre, point_in_question,z_point,v)
-    #
-    #
-    #
-    # angle_to_point1 = find_angle(point, point[3])
-    # angle_to_point2 = find_angle(point, point[4])
-    # angle_to_base1 = find_angle(point, x)
-    # angle_to_base2 = find_angle(point, y)
-    # if angle_to_base1 <= -120 and angle_to_base2 >= 120:
-    #     angle_to_base1 += 360
-    #     if angle_to_point1 <= 120:
-    #         angle_to_point1 += 360
-    #     if angle_to_point2 <= 120:
-    #         angle_to_point2 += 360
-    # elif angle_to_base2 <= -120 and angle_to_base1 >= 120:
-    #     angle_to_base2 += 360
-    #     if angle_to_point1 <= 120:
-    #         angle_to_point1 += 360
-    #     if angle_to_point2 <= 120:
-    #         angle_to_point2 += 360
-    # point1inside = (angle_to_base1 <= angle_to_point1 <= angle_to_base2) or (angle_to_base2 <= angle_to_point1 <= angle_to_base1)
-    # point2inside = (angle_to_base1 <= angle_to_point2 <= angle_to_base2) or (angle_to_base2 <= angle_to_point2 <= angle_to_base1)
-    # if point1inside and point2inside:
-    #     print("ERROR2")
-    #     return point[3], point[4]
-    # elif not point1inside and not point2inside:
-    #     print("ERROR3")
-    #     return False, False
-    # elif not point1inside and point2inside:
-    #     if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
-    #         print("ERROR4")
-    #         return ProjectionToArc(point,x), point[4]
-    #     else:
-    #         print("ERROR5")
-    #         print("proj is ",ProjectionToArc(point,y))
-    #         print("other is ",point[4])
-    #         return ProjectionToArc(point,y),point[4]
-    # else:
-    #     if (angle_to_point1 <= angle_to_base1 <= angle_to_point2) or (angle_to_point2 <= angle_to_base1 <= angle_to_point1):
-    #         print("ERROR6")
-    #         return point[3], ProjectionToArc(point,x)
-    #     else:
-    #         print("ERROR7")
-    #         return point[3], ProjectionToArc(point,y)
 
 
 def DoConesOverlap(p1, p2):
@@ -719,8 +675,7 @@ def one_side_bottleneck(z, u, v, x, y, threshold_distance, epsilon):
     return starting_bound, current_bisect
 
 
-def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, epsilon,recur_checker):
-    recur_checker += 1
+def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, epsilon):
     proj1 = find_intersection(p1, p2, p4, p5)
     proj2 = find_intersection(p1, p3, p4, p5)
     current_lower_dist = point_distance(p2, proj1) - bound
@@ -741,15 +696,13 @@ def bottleneck_bound(p1, p2, p3, p4, p5, centre, radius, bound, base_length, eps
             new_lower = one_side_bottleneck(p1, p2, current_bisect, p4, p5, bound, epsilon)[1]
             return [new_upper, new_lower]
         else:
-            if recur_checker > 10:
-                return [new_upper, new_lower]
             deriv = circ_derivative(centre, radius, current_bisect, base_length)
             if deriv >= 0:
                 return bottleneck_bound(p1, p2, current_bisect, p4, p5, centre, radius, bound,
-                                        base_length, epsilon,recur_checker)
+                                        base_length, epsilon)
             else:
                 return bottleneck_bound(p1, current_bisect, p3, p4, p5, centre, radius, bound,
-                                        base_length, epsilon,recur_checker)
+                                        base_length, epsilon)
 
 
 def bottle_full(x, y, z, bottleneck, epsilon):
@@ -773,8 +726,7 @@ def bottle_full(x, y, z, bottleneck, epsilon):
     else:  #
         close_point = closest_point_on_line(x, y, z)
         line_dist = point_distance(z, close_point)
-        rec_check = 0
-        new_u, new_v = bottleneck_bound(z, z[3], z[4], x, y, centre, radius, threshold_distance, line_dist, epsilon,rec_check)
+        new_u, new_v = bottleneck_bound(z, z[3], z[4], x, y, centre, radius, threshold_distance, line_dist, epsilon)
         return find_new_relocate(z, z[3], z[4], x, y, new_u, new_v)
 
 
@@ -922,15 +874,15 @@ def ApexCollection(z,u,v,x,y,terms,centre,radius): # u is whichever side you're 
                     for item in b:
                         attempt_list.append(item)
             else:
-                a = findIntersection(u,v,x,t)
-                b = findIntersection(u, v, y, t)
-                attempt_list.append(findIntersection(u,v,x,t))
-                attempt_list.append(findIntersection(u, v, y, t ))
+                a = find_intersection(u,v,x,t)
+                b = find_intersection(u, v, y, t)
+                attempt_list.append(find_intersection(u,v,x,t))
+                attempt_list.append(find_intersection(u, v, y, t ))
             if len(attempt_list) > 0:
                 for item in attempt_list:
                     if is_point_on_arc(z,u,v,centre,item) and item not in terms_by_apex:
                         terms_by_apex.append(list(item))
-    terms_by_apex.sort(key=lambda item: point_distance(u,findIntersection(u,v,item,centre)))
+    terms_by_apex.sort(key=lambda item: point_distance(u,find_intersection(u,v,item,centre)))
     return(terms_by_apex)
 
 def first_and_last_empty_triangle(u,v,x,y,rel_terms,apexes):
@@ -972,6 +924,22 @@ def iterated_triangle(x,y,z,terms):
         apexes_found = first_and_last_empty_triangle(uu, vv, xx, yy, relevant_terminals, apexes_on_curve)
 
         return apexes_found[0],apexes_found[1]
+
+def tri_4_check(given_combo,given_grid):
+    polygon = [point[:2] for point in given_combo]
+    xmin, xmax, ymin, ymax = gridrange(polygon)
+    polygon_empty = True
+    for xx in range(xmin, xmax + 1):
+        for yy in range(ymin, ymax + 1):
+            for j in given_grid[xx][yy]:
+                if ray_tracing_method(j[0], j[1], polygon) and j not in given_combo:
+                    polygon_empty = False
+                    break
+            if not polygon_empty:
+                break
+        if not polygon_empty:
+            break
+    return polygon_empty
 
 def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,
                kk, fst_size):
@@ -1039,31 +1007,21 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                                                                                     combo[
                                                                                                         2])) or not reverse_dist(
                 combo[2], combo[1], combo[0])):
-                polygon = [point[:2] for point in combo]
-                xmin, xmax, ymin, ymax = gridrange(polygon)
-                polygon_empty = True
-                for xx in range(xmin, xmax + 1):
-                    for yy in range(ymin, ymax + 1):
-                        for j in grid[xx][yy]:
-                            if ray_tracing_method(j[0], j[1], polygon) and j not in combo:
-                                polygon_empty = False
-                                break
-                        if not polygon_empty:
-                            break
-                    if not polygon_empty:
-                        break
-                if polygon_empty: #to confirm in 10/1/23 meeting
+                if not triangle_on or tri_4_check(combo,grid):
                     pairs = [[combo[0], combo[1]], [combo[0], combo[2]], [combo[1], combo[2]]]
-                    pairs.sort(key=lambda item: point_distance(item[0], item[1]))
-                    a = pairs[2][0]
-                    b = pairs[2][1]
-                    other = [point for point in combo if point not in pairs[2]][0]
-                    checking += 1
-                    if point_to_line_distance(a, b, other) <= min(bottleneck[a[6][0]][other[6][0]],
-                                                               bottleneck[b[6][0]][other[6][0]]):
-                        if not (boundary_constraint(a, b, hull_boundary) and hull.contains(Point(other[:2]))):
-                            branch_set[1].append(equipoint3(other, a, b))
-                            part2 += 1
+                    if rhombus_on:
+                        pairs.sort(key=lambda item: point_distance(item[0], item[1]))
+                        checking += 1
+                        pairs = [pairs[2]]
+                    for option in pairs:
+                        a = option[0]
+                        b = option[1]
+                        other = [point for point in combo if point not in option][0]
+                        if not bottle_on or point_to_line_distance(a, b, other) <= min(bottleneck[a[6][0]][other[6][0]],
+                                                                   bottleneck[b[6][0]][other[6][0]]):
+                            if not (boundary_constraint(a, b, hull_boundary) and hull.contains(Point(other[:2]))):
+                                branch_set[1].append(equipoint3(other, a, b))
+                                part2 += 1
 
     eff = [0, 0, 0, 0, 0, 0]
     tot = [0, 0, 0, 0, 0, 0]
@@ -1188,10 +1146,11 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                                         new_choice[3], new_choice[4] = simple_lune_ext(NPx, NPy,
                                                                                                        new_choice,
                                                                                                        terminals)
-                                                        if not bottle_on or new_choice[3] != False:
+                                                        if bottle_on or new_choice[3] != False:
                                                             new_choice[3], new_choice[4] = bottle_full(NPx, NPy,
                                                                                                        new_choice,
                                                                                                        bottleneck, 0.01)
+                                                        if new_choice[3] != False:
                                                             if (not rhombus_on or rhombus_ext(new_choice, NPx,
                                                                                               NPy)) and (
                                                                     not conjecture or alpha_ext(new_choice[3],
@@ -1199,7 +1158,7 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                                                                                 NPy)) and (
                                                                     not triangle_on or triangle_ext(new_choice, NPx,
                                                                                                     NPy, grid)):
-                                                                if not triangle_on:
+                                                                if triangle_on:
                                                                     new_choice[3], new_choice[4] = iterated_triangle(NPx,NPy,new_choice,terminals)
                                                                 if new_choice[3] != False:
                                                                     part4 += 1
@@ -1293,8 +1252,8 @@ edge_counts = []
 triple_counts = []
 quad_counts = []
 
-bottle_on = True
-rhombus_on = True
+bottle_on = False
+rhombus_on = False
 triangle_on = True
 conjecture = False
 
