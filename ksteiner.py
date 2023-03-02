@@ -1146,7 +1146,7 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                                         new_choice[3], new_choice[4] = simple_lune_ext(NPx, NPy,
                                                                                                        new_choice,
                                                                                                        terminals)
-                                                        if bottle_on or new_choice[3] != False:
+                                                        if bottle_on and new_choice[3] != False:
                                                             new_choice[3], new_choice[4] = bottle_full(NPx, NPy,
                                                                                                        new_choice,
                                                                                                        bottleneck, 0.01)
@@ -1252,9 +1252,9 @@ edge_counts = []
 triple_counts = []
 quad_counts = []
 
-bottle_on = False
+bottle_on = True
 rhombus_on = False
-triangle_on = True
+triangle_on = False
 conjecture = False
 
 plotting = True
@@ -1559,7 +1559,7 @@ if r >= 1 and len(test_inputs) > 1:
     full_results = [ave_times, ave_fst_num, ave_fst_size, ave_steiner_num, ave_deg4_num]
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    with open('%s_graphsteiner%s_%s_%s.txt' % (rand_check,test_inputs[0], test_inputs[-1], timestr), 'w+') as file:
+    with open('k%s_%s_graphsteiner%s_%s_%s.txt' % (kk,rand_check,test_inputs[0], test_inputs[-1], timestr), 'w+') as file:
         file.writelines([str(line) + "\n" for line in full_results])
 
     w = test_inputs
