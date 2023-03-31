@@ -6,9 +6,12 @@ import math
 import random
 import time
 import numpy as np
+import os
 from itertools import combinations
 from shapely.geometry import Point, MultiPoint, LineString
 from shapely.geometry.polygon import LinearRing
+from os import listdir
+from os.path import isfile, join
 
 
 def gridloc(point):
@@ -941,8 +944,46 @@ def tri_4_check(given_combo,given_grid):
             break
     return polygon_empty
 
-def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, edge_counter, trip_counter, quad_counter,
-               kk, fst_size):
+def bottleneck_postproc(fst,full_matrix,terminals_short):
+    nn = len(terminals_short)
+    terminals_list = [list(point) for point in terminals_short]
+    fst_ordered = sorted(fst[3], key=lambda edge: point_distance(edge[0], edge[1]))
+    point_list = []
+    for edge in fst_ordered:
+        if edge[0] not in point_list:
+            point_list.append([edge[0]])
+        if edge[1] not in point_list:
+            point_list.append([edge[1]])
+    bottleneck_post = [[0] * nn for i in range(nn)]
+
+    for edge in fst_ordered:
+        for part in point_list:
+            # print("part is ",part, " edge is ", edge)
+            if edge[0] in part:
+                comp1 = part
+            if edge[1] in part:
+                comp2 = part
+        for i in comp1:
+            if i in terminals_list:
+                for j in comp2:
+                    if j in terminals_list:
+                        bottleneck_post[terminals_list.index(i)][terminals_list.index(j)] = point_distance(edge[0],edge[1])
+                        bottleneck_post[terminals_list.index(j)][terminals_list.index(i)] = point_distance(edge[0],edge[1])
+        newcomp = comp1 + comp2
+        point_list.remove(comp1)
+        point_list.remove(comp2)
+        point_list.append(newcomp)
+
+    comparison = True
+    for i in range(nn):
+        for j in range(nn):
+            if bottleneck_post[i][j] > full_matrix[i][j]:
+                comparison = False
+    return comparison
+
+
+
+def One_Steiner(n, terminals, times,kk, fst_size,fst_percent_count,fin_fst_percent_count, post_proc_sum):
     branch_set = [[] for x in
                   range(kk + 1)]  # general data structure for branches: list with [location,topology,angles]
     branch_set[0].extend(terminals)  # index is size of branch minus 1
@@ -1023,9 +1064,6 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                 branch_set[1].append(equipoint3(other, a, b))
                                 part2 += 1
 
-    eff = [0, 0, 0, 0, 0, 0]
-    tot = [0, 0, 0, 0, 0, 0]
-
     for i in range(1, kk + 1):  # Generate the sets of branches and FSTs with $i$ s.p.
         print("i is ", i)
         for m in range(math.floor(i / 2) + 1):  # check range
@@ -1049,16 +1087,20 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                     b = second_branch[2][0][:2]
                                     c = second_branch[2][1][:2]
                                     steiner_point = steiner(a, b, c)
-                                    if not bottle_on or bottle_constraint([a, b, c], steiner_point, terminals, bottleneck):
-                                        if steiner_point not in [a, b, c]:
-                                            if all([terms_in_lune(a, steiner_point, terminals, [a]),
-                                                    terms_in_lune(b, steiner_point, terminals, [b]),
-                                                    terms_in_lune(c, steiner_point, terminals, [c])]):
+                                    if steiner_point not in [a, b, c]:
+                                        post_proc_start = time.time()
+                                        fst_percent_count += 1
+                                        if not lune_post_on or all([terms_in_lune(a, steiner_point, terminals, [a]),
+                                                terms_in_lune(b, steiner_point, terminals, [b]),
+                                                terms_in_lune(c, steiner_point, terminals, [c])]):
+                                            if not bottle_post_on or bottle_constraint([a, b, c], steiner_point, terminals, bottleneck):
+                                                fin_fst_percent_count += 1
                                                 fst_set.append([1, point_distance(a, steiner_point) + point_distance(b,
                                                                                                                    steiner_point) + point_distance(
                                                     c, steiner_point), first_branch[6] + second_branch[6],
                                                                 [[a, steiner_point], [b, steiner_point],
                                                                  [c, steiner_point]]])
+                                        post_proc_sum += time.time() - post_proc_start
                                 else:
                                     a = second_branch[2][0][:2]
                                     b = first_branch[:2]
@@ -1070,47 +1112,57 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
                                     cross_point_in_cd = (c[0] <= cross_point[0] <= d[0]) or (
                                                 d[0] <= cross_point[0] <= c[0])
                                     if cross_point_in_ab and cross_point_in_cd:
-                                        if bottle_constraint([a, b, c, d], cross_point, terminals, bottleneck):
-                                            if vertical_constraint(a, b, c, d) and vertical_constraint(c, d, a, b):
-                                                if ((is_point_in_cone(second_branch, first_branch) and (not conjecture or not dist_constraint(
-                                                        c, d,
-                                                        b))) and (not conjecture or not reverse_dist(
-                                                    c, d, b))) and lune_constraint(c, d,
-                                                                                 b):  # if the point is in the cone, lune and distance constraints
-                                                    if ((quad_constraint(a, b, c) and quad_constraint(a, b,
-                                                                                                    d)) and quad_constraint(
-                                                            c,
-                                                            d,
-                                                            a)) and quad_constraint(
-                                                        c, d, b):
-                                                        if cross_point not in [a, b, c, d]:
-                                                            if all([terms_in_lune(a, cross_point, terminals, [a]),
-                                                                    terms_in_lune(b, cross_point, terminals, [b]),
-                                                                    terms_in_lune(c, cross_point, terminals, [c]),
-                                                                    terms_in_lune(d, cross_point, terminals, [d])]):
+                                        if vertical_constraint(a, b, c, d) and vertical_constraint(c, d, a, b):
+                                            if ((is_point_in_cone(second_branch, first_branch) and (not conjecture or not dist_constraint(
+                                                    c, d,
+                                                    b))) and (not conjecture or not reverse_dist(
+                                                c, d, b))):  # if the point is in the cone and distance constraints
+                                                if not rhombus_on or (((quad_constraint(a, b, c) and quad_constraint(a, b,
+                                                                                                d)) and quad_constraint(
+                                                        c,
+                                                        d,
+                                                        a)) and quad_constraint(
+                                                    c, d, b)):
+                                                    if cross_point not in [a, b, c, d]:
+                                                        fst_percent_count += 1
+                                                        post_proc_start = time.time()
+                                                        if not lune_post_on or all([terms_in_lune(a, cross_point, terminals, [a]),
+                                                                terms_in_lune(b, cross_point, terminals, [b]),
+                                                                terms_in_lune(c, cross_point, terminals, [c]),
+                                                                terms_in_lune(d, cross_point, terminals, [d])]):
+                                                            if not bottle_post_on or bottle_constraint([a, b, c, d], cross_point, terminals,
+                                                                                 bottleneck):
+                                                                fin_fst_percent_count += 1
                                                                 fst_set.append(
                                                                     [1, point_distance(a, b) + point_distance(c, d),
                                                                      first_branch[6] + second_branch[6],
                                                                      [[b, cross_point], [a, cross_point],
                                                                       [c, cross_point],
                                                                       [d, cross_point]]])
+                                                            post_proc_sum += time.time() - post_proc_start
                             else:
                                 new_fst = reverse_melzak(first_branch, second_branch)
                                 if not any(edge is False for edge in new_fst):
                                     edge_dists = [point_distance(edge[0], edge[1]) for edge in new_fst]
                                     if not any(dist == 0 for dist in edge_dists):
-
+                                        post_proc_start = time.time()
+                                        fst_percent_count += 1
                                         lunes_empty = True
-                                        for edge in new_fst:
-                                            if not terms_in_lune(edge[0], edge[1], terminals, [edge[0], edge[1]]):
-                                                lunes_empty = False
-                                                break
-                                            if not lunes_empty:
-                                                break
+                                        if lune_post_on:
+                                            for edge in new_fst:
+                                                if not terms_in_lune(edge[0], edge[1], terminals, [edge[0], edge[1]]):
+                                                    lunes_empty = False
+                                                    break
+                                                if not lunes_empty:
+                                                    break
                                         if lunes_empty:
                                             distance_sum = sum(edge_dists)
                                             hyperedge = first_branch[6] + second_branch[6]
-                                            fst_set.append([k_sum, distance_sum, hyperedge, new_fst])
+                                            fst_data = [k_sum, distance_sum, hyperedge, new_fst]
+                                            if not bottle_post_on or bottleneck_postproc(fst_data,bottleneck,terminals_short):
+                                                fin_fst_percent_count += 1
+                                                fst_set.append(fst_data)
+                                        post_proc_sum += time.time() - post_proc_start
             if m <= math.ceil(i / 3) and i < kk:
                 for q in range(m, max(math.floor((i - m) / 2), 1)):
                     print(m, q, i - (m + q))
@@ -1184,24 +1236,31 @@ def One_Steiner(n, terminals, times, edge_counts, triple_counts, quad_counts, ed
     output = [test_inputs[0], [point[:2] for point in terminals]]
     output.extend(jae_set)
     output.extend(jae_counts)
-    with open('steineroutput%s.txt' % timestr, 'w+') as file:
+
+    directory = "k%s%s" % (kk,rand_check)
+
+    # Parent Directory path
+    parent_dir = join(os.getcwd(), "Output Files")
+
+    # Path
+    path = os.path.join(parent_dir, directory)
+
+    CHECK_FOLDER = os.path.isdir(path)
+
+    # If folder doesn't exist, then create it.
+    if not CHECK_FOLDER:
+        os.mkdir(path)
+
+    with open(os.path.join(path, 'k%s%ssteineroutput_term%s_rep%s_%s.txt' % (kk,rand_check,n,len(times), timestr)), 'w+') as file:
         file.writelines([str(line) + "\n" for line in output])
 
-    num_edges = sum(1 for x in fst_set if len(x[2]) == 2)
-    num_3steiner = sum(1 for x in fst_set if len(x[2]) == 3)
-    num_4steiner = sum(1 for x in fst_set if len(x[2]) == 4)
-
-    edge_counter += num_edges
-    trip_counter += num_3steiner
-    quad_counter += num_4steiner
-
-    return terminals, jae_set, times, edge_counts, triple_counts, quad_counts
+    return terminals, jae_set, times, fst_percent_count, fin_fst_percent_count, post_proc_sum
 
 
 while True:
     try:
-        rand_check = input("Random points (R), given points (G), or grid-like points (GL)? ")
-        if rand_check == "R" or rand_check == "G" or rand_check == "GL":
+        rand_check = input("Random points (R), experiment set random (ER), grid-like points (GL), experiment set grid-like (EGL), or given points (G)? ")
+        if rand_check == "R" or rand_check == "G" or rand_check == "GL" or rand_check == "ER" or rand_check == "EGL":
             print("Entered successfully!")
             break
         else:
@@ -1241,40 +1300,68 @@ elif rand_check == "G":
 
     test_inputs = [len(points)]
     r = 1
+elif rand_check == "ER" or rand_check == "EGL":
+    print("This function requires other programs, ignore if you are not the creator")
+    bb = int(input("Max number of terminals?"))
+    if rand_check == "EGL":
+        perturb = float(input("How big a perturbation (0.0-1.0)? "))
+    itit = int(input("Which command prompt number is this (0-3)?"))
+    parent_dir = join(os.getcwd(), "Input Files")
+    parent_dir = join(parent_dir, rand_check[1:])
+    test_inputs = sorted([int(f.name) for f in os.scandir(parent_dir) if f.is_dir()])
+    test_inputs = test_inputs[:int((bb/5))]
+    r = 5
+
+
 
 ave_times = []
+ave_gen_times = []
+ave_post_proc_times = []
+ave_concat_times = []
+
 ave_fst_num = []
 ave_fst_size = []
-ave_steiner_num = []
+# ave_steiner_num = []
 ave_deg4_num = []
+ave_deg3_num = []
+ave_fst_percent = []
 
 edge_counts = []
 triple_counts = []
 quad_counts = []
 
 bottle_on = True
-rhombus_on = False
-triangle_on = False
+rhombus_on = True
+triangle_on = True
+bottle_post_on = True
+lune_post_on = True
 conjecture = False
 
 plotting = True
 concat = True
-
-edge_counter = 0
-trip_counter = 0
-quad_counter = 0
 
 ff = 5  # ff and gg determine grid size when allocating points
 gg = 5
 
 # while quad_counter < 1:
 for n in test_inputs:
+    fst_percent = []
     times = []
+    gen_times = []
+    post_proc_times = []
+    concat_times =[]
     fst_num = []
     fst_size = []
-    steiner_num = []
+    #steiner_num = []
     deg4_num = []
+    if rand_check == "ER" or rand_check == "EGL":
+        mypath = join(parent_dir, str(n).zfill(3))
+        terminal_files = [f for f in listdir(mypath) if isfile(join(mypath, f))]
+        terminal_files = sorted([f for f in terminal_files if terminal_files.index(f) % 4 == itit])
     for i in range(r):
+        post_proc_sum = 0
+        fst_percent_count = 0
+        fin_fst_percent_count = 0
         print("Now checking ", n, " terminals, ",i+1, " of ", r, "repeats.")
         start_time = time.time()
         if rand_check == "G":
@@ -1290,6 +1377,13 @@ for n in test_inputs:
             with open('errorcheck%s.txt' % (r),
                       'w') as file:
                 file.writelines([str(item) for item in [just_terminals]])
+        elif rand_check == "ER" or rand_check == "EGL":
+            print(mypath,terminal_files)
+            filename = join(mypath,terminal_files[i])
+            with open(filename, 'r') as file:
+                fileinfo = file.read().splitlines()
+            points = ast.literal_eval(fileinfo[0])
+            terminals = [x + [[], [-1, -1], [-1, -1], 0, [points.index(x)]] for x in points]
         else:
             if math.floor(math.sqrt(n)) ** 2 == n:
                 qq = int(math.sqrt(n))
@@ -1326,11 +1420,23 @@ for n in test_inputs:
             point.append([gridx, gridy])
             grid[gridx][gridy].append(point)
 
-        terminals, jae_set, times, edge_counts, triple_counts, quad_counts = One_Steiner(n, terminals, times,
-                                                                                        edge_counts, triple_counts,
-                                                                                        quad_counts, edge_counter,
-                                                                                        trip_counter, quad_counter, kk,
-                                                                                        fst_num)
+        terminals, jae_set, times,fst_percent_count, fin_fst_percent_count, post_proc_sum = One_Steiner(n, terminals, times, kk,
+                                                                                        fst_num,fst_percent_count,fin_fst_percent_count,post_proc_sum)
+
+        # number of degree 4 steiner points in fst is t - 2 -s where t = # terminals, s = # steiner points
+        deg4_counter = 0
+        for ii in range(len(jae_set[0])):
+            if len(jae_set[2][ii]) - 2 - jae_set[0][ii] > 0:
+                deg4_counter += 1
+
+        deg4_num.append(deg4_counter)
+        fst_num.append(len(jae_set[0]))
+        fst_size.append(sum([len(x) for x in jae_set[2]]) / len(jae_set[2]))
+
+        if fst_percent_count != 0:
+            fst_percent.append(fin_fst_percent_count / fst_percent_count)
+        else:
+            fst_percent.append(int(0))
 
         if (r == 1 and len(test_inputs) == 1) and concat == False:
 
@@ -1363,8 +1469,7 @@ for n in test_inputs:
             plt.show()
 
         if concat == True:
-            fst_num.append(len(jae_set[0]))
-            fst_size.append(sum([len(x) for x in jae_set[2]]) / len(jae_set[2]))
+            concat_start = time.time()
             n = int(n)
             # number of Steiner points in each hyperedge
             S = jae_set[0]
@@ -1505,92 +1610,197 @@ for n in test_inputs:
             def count(l):
                 return sum(1 + count(i) for i in l if isinstance(i, list))
 
-
-            # number of degree 4 steiner points in fst is t - 2 -s where t = # terminals, s = # steiner points
-
-            steiner_num.append(sum(S[x] for x in htree))
-            deg4_num.append(sum(len(T[x]) - 2 - S[x] for x in htree))
-
             print("--- %s seconds ---" % (time.time() - start_time))
-            times.append(time.time() - start_time)
 
+        #steiner_num.append(sum(S[x] for x in htree))
 
-            if (plotting == True and r == 1) and len(test_inputs) == 1:
-                fig, ax = plt.subplots()
+        times.append(time.time() - start_time)
+        gen_times.append(times[-1])
+        if lune_post_on:
+            post_proc_times.append(post_proc_sum)
+            gen_times[-1] += - post_proc_sum
+        if concat:
+            concat_times.append(time.time() - concat_start)
+            gen_times[-1] += - concat_times[-1]
 
-                xs = [point[0] for point in terminals]  # this part is for plotting the points
-                ys = [point[1] for point in terminals]
+        if (plotting == True and r == 1) and len(test_inputs) == 1:
+            fig, ax = plt.subplots()
 
-                for i in range(len(terminals)):
-                    ax.annotate(i, (xs[i], ys[i]))
+            xs = [point[0] for point in terminals]  # this part is for plotting the points
+            ys = [point[1] for point in terminals]
 
-                for i in range(len(htree)):
-                    a = htree[i]
-                    he = topologies[a]
-                    c = count(he)
-                    if c == 2:
-                        plt.plot([he[0][0], he[1][0]], [he[0][1], he[1][1]], 'r')
-                    else:
-                        for j in range(len(he)):
-                            e = he[j]
-                            plt.plot([e[0][0], e[1][0]], [e[0][1], e[1][1]], 'b')
+            for i in range(len(terminals)):
+                ax.annotate(i, (xs[i], ys[i]))
 
-                plt.xlim([-0.05, 1.05])
-                plt.ylim([-0.05, 1.05])
-                ax.set_aspect('equal')
+            for i in range(len(htree)):
+                a = htree[i]
+                he = topologies[a]
+                c = count(he)
+                if c == 2:
+                    plt.plot([he[0][0], he[1][0]], [he[0][1], he[1][1]], 'r')
+                else:
+                    for j in range(len(he)):
+                        e = he[j]
+                        plt.plot([e[0][0], e[1][0]], [e[0][1], e[1][1]], 'b')
 
-                for i in range(n):
-                    plt.scatter(terminals[i][0], terminals[i][1], c='k')
-                plt.show()
-    print(times)
-    ave_times.append(sum(times) / len(times))
-    ave_fst_num.append(sum(fst_num) / len(fst_num))
-    ave_fst_size.append(sum(fst_size) / len(fst_size))
-    ave_steiner_num.append(sum(steiner_num) / len(steiner_num))
-    ave_deg4_num.append(sum(deg4_num) / len(deg4_num))
+            plt.xlim([-0.05, 1.05])
+            plt.ylim([-0.05, 1.05])
+            ax.set_aspect('equal')
+
+            for i in range(n):
+                plt.scatter(terminals[i][0], terminals[i][1], c='k')
+            plt.show()
+    # print(times)
+    # print(concat_times)
+    # print(post_proc_times)
+    # print(gen_times)
+    # print(fst_num)
+    # print(fst_size)
+    ave_times += [sum(times) / len(times)] if len(times) != 0 else [0]
+    ave_concat_times += [sum(concat_times)/len(concat_times)] if len(concat_times) != 0 else [0]
+    ave_post_proc_times += [sum(post_proc_times) / len(post_proc_times)] if len(post_proc_times) != 0 else [0]
+    ave_gen_times += [sum(gen_times) / len(gen_times)] if len(gen_times) != 0 else [0]
+    ave_fst_num += [sum(fst_num) / len(fst_num)] if len(fst_num) != 0 else [0]
+    ave_fst_size += [sum(fst_size) / len(fst_size)] if len(fst_size) != 0 else [0]
+    # ave_steiner_num += [sum(steiner_num) / len(steiner_num)] if len(steiner_num) != 0 else [0]
+    ave_deg4_num += [sum(deg4_num) / len(deg4_num)] if len(deg4_num) != 0 else [0]
+    ave_fst_percent += [sum(fst_percent) / len(fst_percent)] if len(fst_percent) != 0 else [0]
+    ave_deg3_num += [ave_fst_num[-1] - ave_deg4_num[-1]]
     print(ave_times)
+    print(ave_gen_times)
+    print(ave_post_proc_times)
+    print(ave_concat_times)
     print(ave_fst_num)
     print(ave_fst_size)
-    print(ave_steiner_num)
+    # print(ave_steiner_num)
     print(ave_deg4_num)
+    print(ave_fst_percent)
 
 
-if r >= 1 and len(test_inputs) > 1:
-    full_results = [ave_times, ave_fst_num, ave_fst_size, ave_steiner_num, ave_deg4_num]
+if r >= 1 and len(test_inputs) >= 1:
+    full_results = [ave_times,ave_gen_times,ave_post_proc_times,ave_concat_times, ave_fst_num, ave_fst_size, ave_deg4_num,ave_fst_percent]
+
+    directory = "k%s%s" % (kk, rand_check)
+
+    # Parent Directory path
+    parent_dir = join(os.getcwd(), "Output Files")
+
+    # Path
+    path = os.path.join(parent_dir, directory)
+
+    CHECK_FOLDER = os.path.isdir(path)
+
+    if not CHECK_FOLDER:
+        os.mkdir(path)
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    with open('k%s_%s_graphsteiner%s_%s_%s.txt' % (kk,rand_check,test_inputs[0], test_inputs[-1], timestr), 'w+') as file:
+    with open(os.path.join(path, 'k%s_%s_graphsteiner%s_%s_%s.txt' % (kk,rand_check,test_inputs[0], test_inputs[-1], timestr)), 'w+') as file:
         file.writelines([str(line) + "\n" for line in full_results])
+
+if r >= 1 and len(test_inputs) > 1:
+
+
+    directory = "k%s%s" % (kk, rand_check)
+
+    # Parent Directory path
+    parent_dir = join(os.getcwd(), "Output Files")
+
+    # Path
+    path = os.path.join(parent_dir, directory)
+
+    CHECK_FOLDER = os.path.isdir(path)
+
+    if not CHECK_FOLDER:
+        os.mkdir(path)
 
     w = test_inputs
     x = ave_times
     plt.plot(w, x, label="# of edges")
     plt.xlabel('# of terminals')
     plt.ylabel('Times')
-    plt.show()
+    plt.savefig(os.path.join(path, 'k%s%stime' % (kk,rand_check)))
+
+    plt.close()
 
     x = test_inputs
     y = ave_fst_num
     plt.plot(x, y)
     plt.xlabel('# of terminals')
     plt.ylabel('Number of FST\'s')
-    plt.show()
+    plt.savefig(os.path.join(path, 'k%s%sfst' % (kk,rand_check)))
 
-    x = ave_deg4_num
-    plt.plot(w, x, label="# of edges")
-    plt.xlabel('# of terminals')
-    plt.ylabel('# of degree-4 vertices')
-    plt.show()
+    plt.close()
+
+    # x = ave_deg4_num
+    # plt.plot(w, x, label="# of edges")
+    # plt.xlabel('# of terminals')
+    # plt.ylabel('# of FSTs with at least one degree-4 Steiner point')
+    # plt.savefig(os.path.join(path, 'k%s%sdeg4' % (kk,rand_check)))
+
+    plt.close()
 
     x = ave_fst_size
     plt.plot(w, x, label="# of edges")
     plt.xlabel('# of terminals')
     plt.ylabel('Average size of FST\'s')
-    plt.show()
+    plt.savefig(os.path.join(path, 'k%s%sfstsize' % (kk,rand_check)))
 
-    x = ave_steiner_num
-    plt.plot(w, x, label="# of edges")
+    plt.close()
+
+    # x = ave_steiner_num
+    # plt.plot(w, x, label="# of edges")
+    # plt.xlabel('# of terminals')
+    # plt.ylabel('Average # of Steiner points')
+    # plt.savefig(os.path.join(path, 'k%s%sstein' % (kk,rand_check)))
+    #
+    # plt.close()
+
+    w = test_inputs
+    x = ave_fst_percent
+    plt.plot(w, x, label="/% of FSTs elim by lune test vs # of Terminals")
     plt.xlabel('# of terminals')
-    plt.ylabel('Average # of Steiner points')
-    plt.show()
+    plt.ylabel('/% of FSTs elim by lune test')
+    plt.savefig(os.path.join(path, 'k%s%selim' % (kk,rand_check)))
+
+    plt.close()
     ###########################################################################
+    Times = {
+        "Generation": ave_gen_times,
+        }
+    if lune_post_on:
+        Times["Post-Processing"] = ave_post_proc_times
+    if concat:
+        Times["Concatenation"] = ave_concat_times
+
+    print(Times)
+
+    fig, ax = plt.subplots()
+    bottom = np.zeros(len(test_inputs))
+
+    for boolean, this_time in Times.items():
+        p = ax.bar(test_inputs, this_time, label=boolean, bottom=bottom)
+        bottom += this_time
+
+    ax.set_title("Time vs Terminals by stage")
+    ax.legend(loc="upper left")
+    plt.savefig(os.path.join(path, 'k%s%sfulltime' % (kk, rand_check)))
+    plt.close()
+
+    Number_of_FSTs = {
+        "No degree-4 Steiner points": ave_deg3_num,
+        "At least one degree-4 Steiner point": ave_deg4_num,
+        }
+
+    print(Number_of_FSTs)
+
+    fig, ax = plt.subplots()
+    bottom = np.zeros(len(test_inputs))
+
+    for boolean, this_fst_num in Number_of_FSTs.items():
+        p = ax.bar(test_inputs, this_fst_num, label=boolean, bottom=bottom)
+        bottom += this_fst_num
+
+    ax.set_title("Number of FSTs vs Terminals by Presence of Degree 4 Steiner points")
+    ax.legend(loc="upper left")
+    plt.savefig(os.path.join(path, 'k%s%sdeg4' % (kk,rand_check)))
+    plt.show()
