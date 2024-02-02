@@ -348,12 +348,17 @@ def IntervalProjectionTest(point, x,
     is_u_in_xy_cone = same_side(u,x,z,y) and same_side(u,y,z,x)
     if not x_in_zuv_cone and not y_in_zuv_cone:
         #checking if u is between z and projection of u from z (i.e. that the projection is on the right side) up to a given tolerance
-        proj_u = find_intersection(z,u,x,y)
-        proj_v = find_intersection(z,v,x,y)
-        if is_point_on_interval(u,z,proj_u) and is_point_on_interval(proj_u,x,y) and is_point_on_interval(proj_v,x,y):
-            return u,v
-        else:
+        distinctness_checker = [tuple(item[:2]) for item in [u,v,x,y]]
+        distinctness_checker = set(distinctness_checker)
+        if len(distinctness_checker) < 4:
             return False,False
+        else:
+            proj_u = find_intersection(z,u,x,y)
+            proj_v = find_intersection(z,v,x,y)
+            if is_point_on_interval(u,z,proj_u) and is_point_on_interval(proj_u,x,y) and is_point_on_interval(proj_v,x,y):
+                return u,v
+            else:
+                return False,False
     elif x_in_zuv_cone and not y_in_zuv_cone:
         if is_u_in_xy_cone:
             return ProjectionToArc(point, x),u
@@ -519,8 +524,12 @@ def rhombus_ext(point, x, y):  # returns False if arc does not have any points i
         if not quad_constraint(x, y, point[3]) and not quad_constraint(x, y, point[4]):
             eqpoint1 = equipoint2(x, y)
             eqpoint2 = equipoint2(y, x)
-            if ([ArcLineInter(point, x, eqpoint1) is None, ArcLineInter(point, x, eqpoint2) is None, ArcLineInter(point, y, eqpoint1) is None, ArcLineInter(
-                    point, x, eqpoint2) is None, ArcLineInter(point, x, eqpoint2) is None]).all():
+            distinctness_checker = [tuple(item[:2]) for item in [eqpoint1,eqpoint2,x,y,point]]
+            distinctness_checker = set(distinctness_checker)
+            if len(distinctness_checker) < 5:
+                return True
+            elif ([ArcLineInter(point, x, eqpoint1) is None, ArcLineInter(point, x, eqpoint2) is None, ArcLineInter(point, y, eqpoint1) is None, ArcLineInter(
+                    point, y, eqpoint2) is None, ArcLineInter(point, y, eqpoint2) is None]).all():
                 return False
         else:
             return True
@@ -564,8 +573,10 @@ def ray_tracing_method(x, y, poly):  # returns true if x,y is in poly
 def triangle_ext(point, x, y,
                  grid_terms):  # returns true if triangle is empty, must be done after IntervalProjectionTest
     vertices = [point[:2], x[:2], y[:2]]
-    # polygon = Polygon(vertices)
-    if len(point[2]) > 0:
+    tupled_vertices = [tuple(item) for item in vertices]
+    if len(set(tupled_vertices)) < 3:
+        return False
+    elif len(point[2]) > 0:
         # first find the points on the arc that give a tangent through x,y, or take u,v if they lie outside the arc
         circle_centre, circle_radius = find_circle(point[:2], point[3], point[4])
         rhs = find_intersection(point[:2], point[3], x, y)
@@ -713,24 +724,29 @@ def bottle_full(x, y, z, bottleneck, epsilon):
     if len(z[2]) != 2 or not prelim_check:
         return [z[3], z[4]]
     centre, radius = find_circle(z[:2], z[2][0], z[2][1])
-    projections = [find_intersection(centre, z[3], x, y), find_intersection(centre, z[4], x, y)]
-    lengths = [point_distance(z[3], projections[0]), point_distance(z[4], projections[1])]
-    bot_dist = []
-    for a in z[6]:
-        for b in y[6] + x[6]:
-            bot_dist.append(bottleneck[a][b])
-    threshold_distance = min(bot_dist)
-    min_length = min(lengths)
-    max_length = max(lengths)
-    if max_length <= threshold_distance:
+    distinctness_checker = [tuple(item[:2]) for item in [centre, z[3], x, y,z[4]]]
+    distinctness_checker = set(distinctness_checker)
+    if len(distinctness_checker) < 5:
         return [z[3], z[4]]
-    elif min_length < threshold_distance and max_length > threshold_distance:
-        return one_side_bottleneck(z, z[3], z[4], x, y, threshold_distance, epsilon)
-    else:  #
-        close_point = closest_point_on_line(x, y, z)
-        line_dist = point_distance(z, close_point)
-        new_u, new_v = bottleneck_bound(z, z[3], z[4], x, y, centre, radius, threshold_distance, line_dist, epsilon)
-        return find_new_relocate(z, z[3], z[4], x, y, new_u, new_v)
+    else:
+        projections = [find_intersection(centre, z[3], x, y), find_intersection(centre, z[4], x, y)]
+        lengths = [point_distance(z[3], projections[0]), point_distance(z[4], projections[1])]
+        bot_dist = []
+        for a in z[6]:
+            for b in y[6] + x[6]:
+                bot_dist.append(bottleneck[a][b])
+        threshold_distance = min(bot_dist)
+        min_length = min(lengths)
+        max_length = max(lengths)
+        if max_length <= threshold_distance:
+            return [z[3], z[4]]
+        elif min_length < threshold_distance and max_length > threshold_distance:
+            return one_side_bottleneck(z, z[3], z[4], x, y, threshold_distance, epsilon)
+        else:  #
+            close_point = closest_point_on_line(x, y, z)
+            line_dist = point_distance(z, close_point)
+            new_u, new_v = bottleneck_bound(z, z[3], z[4], x, y, centre, radius, threshold_distance, line_dist, epsilon)
+            return find_new_relocate(z, z[3], z[4], x, y, new_u, new_v)
 
 
 def get_circle_intersections(x0, y0, r0, x1, y1, r1):
@@ -801,22 +817,29 @@ def boundary_constraint(p1, p2, hull_bound):
 def simple_lune_ext(x, y, z, terms):  # to be fixed if x,y interval is vertical
     if z[3] == z[4] == [-1, -1]:
         return z[3], z[4]
-    poss1 = find_intersection(x, y, z, z[3])  # note we already know that projections of u and v give us an interval equal to or in xy
-    poss2 = find_intersection(x, y, z, z[4])
-    dist1 = point_distance(poss1, x)
-    dist2 = point_distance(poss2, x)
-    if dist1 <= dist2:
-        ix = poss1
-        iy = poss2
+    distinctness_checker = [tuple(item[:2]) for item in [x, y, z, z[3],z[4]]]
+    distinctness_checker = set(distinctness_checker)
+    if len(distinctness_checker) < 5:
+        return z[3], z[4]
     else:
-        ix = poss2
-        iy = poss1
-    iy, xiy_dist = simple_ext_lemma(x, iy, y, z, terms)
-    ix, yix_dist = simple_ext_lemma(y, ix, x, z, terms)
-    if point_distance(x, ix) >= xiy_dist:
-        return False, False
-    else:
-        return ProjectionToArc(z, ix), ProjectionToArc(z, iy)
+        # print("x is ", x, " y is ", y, " z is ", z, " z[3] is ", z[3])
+        # print("x is ", x," y is ", y," z is ", z, " z[4] is ", z[4])
+        poss1 = find_intersection(x, y, z, z[3])  # note we already know that projections of u and v give us an interval equal to or in xy
+        poss2 = find_intersection(x, y, z, z[4])
+        dist1 = point_distance(poss1, x)
+        dist2 = point_distance(poss2, x)
+        if dist1 <= dist2:
+            ix = poss1
+            iy = poss2
+        else:
+            ix = poss2
+            iy = poss1
+        iy, xiy_dist = simple_ext_lemma(x, iy, y, z, terms)
+        ix, yix_dist = simple_ext_lemma(y, ix, x, z, terms)
+        if point_distance(x, ix) >= xiy_dist:
+            return False, False
+        else:
+            return ProjectionToArc(z, ix), ProjectionToArc(z, iy)
 
 
 def simple_ext_lemma(x, iy, y, z, terminals):  # horizontal lune test
@@ -1028,194 +1051,195 @@ def One_Steiner(n, terminals, times,kk, fst_size,fst_percent_count,fin_fst_perce
     hull = MultiPoint(terminals_short).convex_hull
     hull_boundary = MultiPoint(terminals_short).convex_hull.boundary
 
-    for combo in combinations(terminals, 2):
-        part1 += 2
+    if kk > 0:
+        for combo in combinations(terminals, 2):
+            part1 += 2
 
-        ep1 = equipoint2(combo[0], combo[1])
-        ep2 = equipoint2(combo[1], combo[0])
+            ep1 = equipoint2(combo[0], combo[1])
+            ep2 = equipoint2(combo[1], combo[0])
 
-        if not (boundary_constraint(combo[0], combo[1], hull_boundary) and hull.contains(Point(ep1[:2]))):
-            branch_set[1].append(ep1)
+            if not (boundary_constraint(combo[0], combo[1], hull_boundary) and hull.contains(Point(ep1[:2]))):
+                branch_set[1].append(ep1)
 
-        if not (boundary_constraint(combo[0], combo[1], hull_boundary) and hull.contains(Point(ep2[:2]))):
-            branch_set[1].append(ep2)
-    checking = 0
-    for combo in combinations(terminals, 3):
-        if not conjecture or (
-                (not dist_constraint(combo[0], combo[1], combo[2]) or not dist_constraint(combo[1], combo[0], combo[
-                    2])) or not dist_constraint(combo[2], combo[1], combo[0])):
-            if not conjecture or ((not reverse_dist(combo[0], combo[1], combo[2]) or not reverse_dist(combo[1], combo[0],
-                                                                                                    combo[
-                                                                                                        2])) or not reverse_dist(
-                combo[2], combo[1], combo[0])):
-                if not triangle_on or tri_4_check(combo,grid):
-                    pairs = [[combo[0], combo[1]], [combo[0], combo[2]], [combo[1], combo[2]]]
-                    if rhombus_on:
-                        pairs.sort(key=lambda item: point_distance(item[0], item[1]))
-                        checking += 1
-                        pairs = [pairs[2]]
-                    for option in pairs:
-                        a = option[0]
-                        b = option[1]
-                        other = [point for point in combo if point not in option][0]
-                        if not bottle_on or point_to_line_distance(a, b, other) <= min(bottleneck[a[6][0]][other[6][0]],
-                                                                   bottleneck[b[6][0]][other[6][0]]):
-                            if not (boundary_constraint(a, b, hull_boundary) and hull.contains(Point(other[:2]))):
-                                branch_set[1].append(equipoint3(other, a, b))
-                                part2 += 1
+            if not (boundary_constraint(combo[0], combo[1], hull_boundary) and hull.contains(Point(ep2[:2]))):
+                branch_set[1].append(ep2)
+        checking = 0
+        for combo in combinations(terminals, 3):
+            if not conjecture or (
+                    (not dist_constraint(combo[0], combo[1], combo[2]) or not dist_constraint(combo[1], combo[0], combo[
+                        2])) or not dist_constraint(combo[2], combo[1], combo[0])):
+                if not conjecture or ((not reverse_dist(combo[0], combo[1], combo[2]) or not reverse_dist(combo[1], combo[0],
+                                                                                                        combo[
+                                                                                                            2])) or not reverse_dist(
+                    combo[2], combo[1], combo[0])):
+                    if not triangle_on or tri_4_check(combo,grid):
+                        pairs = [[combo[0], combo[1]], [combo[0], combo[2]], [combo[1], combo[2]]]
+                        if rhombus_on:
+                            pairs.sort(key=lambda item: point_distance(item[0], item[1]))
+                            checking += 1
+                            pairs = [pairs[2]]
+                        for option in pairs:
+                            a = option[0]
+                            b = option[1]
+                            other = [point for point in combo if point not in option][0]
+                            if not bottle_on or point_to_line_distance(a, b, other) <= min(bottleneck[a[6][0]][other[6][0]],
+                                                                       bottleneck[b[6][0]][other[6][0]]):
+                                if not (boundary_constraint(a, b, hull_boundary) and hull.contains(Point(other[:2]))):
+                                    branch_set[1].append(equipoint3(other, a, b))
+                                    part2 += 1
 
-    for i in range(1, kk + 1):  # Generate the sets of branches and FSTs with $i$ s.p.
-        print("i is ", i)
-        for m in range(math.floor(i / 2) + 1):  # check range
-            print("m is ", m)
-            print(i - m, m, len(branch_set[i - m]), len(branch_set[m]))
-            for first_branch in branch_set[m]:
-                for second_branch in branch_set[i - m]:
-                    if not bool(set(first_branch[6]) & set(second_branch[6])):
-                        if 1 < i < kk:
-                            if DoConesOverlap(first_branch, second_branch):
-                                part3 += 1
-                                if equipoint2(combo[0], combo[1]) not in branch_set[i + 1]:
-                                    branch_set[i + 1].extend(
-                                        [equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
-                        if is_point_in_cone(first_branch, second_branch) and is_point_in_cone(second_branch, first_branch):
-                            k_sum = first_branch[5] + second_branch[5]
-                            if k_sum == 1:
-                                if len(second_branch[
-                                           2]) == 2:  # second branch is guaranteed to be the one with non-zero k_sum
-                                    a = first_branch[:2]
-                                    b = second_branch[2][0][:2]
-                                    c = second_branch[2][1][:2]
-                                    steiner_point = steiner(a, b, c)
-                                    if steiner_point not in [a, b, c]:
-                                        post_proc_start = time.time()
-                                        fst_percent_count += 1
-                                        if not lune_post_on or all([terms_in_lune(a, steiner_point, terminals, [a]),
-                                                terms_in_lune(b, steiner_point, terminals, [b]),
-                                                terms_in_lune(c, steiner_point, terminals, [c])]):
-                                            if not bottle_post_on or bottle_constraint([a, b, c], steiner_point, terminals, bottleneck):
-                                                fin_fst_percent_count += 1
-                                                fst_set.append([1, point_distance(a, steiner_point) + point_distance(b,
-                                                                                                                   steiner_point) + point_distance(
-                                                    c, steiner_point), first_branch[6] + second_branch[6],
-                                                                [[a, steiner_point], [b, steiner_point],
-                                                                 [c, steiner_point]]])
-                                        post_proc_sum += time.time() - post_proc_start
+        for i in range(1, kk + 1):  # Generate the sets of branches and FSTs with $i$ s.p.
+            print("i is ", i)
+            for m in range(math.floor(i / 2) + 1):  # check range
+                print("m is ", m)
+                print(i - m, m, len(branch_set[i - m]), len(branch_set[m]))
+                for first_branch in branch_set[m]:
+                    for second_branch in branch_set[i - m]:
+                        if not bool(set(first_branch[6]) & set(second_branch[6])):
+                            if 1 < i < kk:
+                                if DoConesOverlap(first_branch, second_branch):
+                                    part3 += 1
+                                    if equipoint2(combo[0], combo[1]) not in branch_set[i + 1]:
+                                        branch_set[i + 1].extend(
+                                            [equipoint2(combo[0], combo[1]), equipoint2(combo[1], combo[0])])
+                            if is_point_in_cone(first_branch, second_branch) and is_point_in_cone(second_branch, first_branch):
+                                k_sum = first_branch[5] + second_branch[5]
+                                if k_sum == 1:
+                                    if len(second_branch[
+                                               2]) == 2:  # second branch is guaranteed to be the one with non-zero k_sum
+                                        a = first_branch[:2]
+                                        b = second_branch[2][0][:2]
+                                        c = second_branch[2][1][:2]
+                                        steiner_point = steiner(a, b, c)
+                                        if steiner_point not in [a, b, c]:
+                                            post_proc_start = time.time()
+                                            fst_percent_count += 1
+                                            if not lune_post_on or all([terms_in_lune(a, steiner_point, terminals, [a]),
+                                                    terms_in_lune(b, steiner_point, terminals, [b]),
+                                                    terms_in_lune(c, steiner_point, terminals, [c])]):
+                                                if not bottle_post_on or bottle_constraint([a, b, c], steiner_point, terminals, bottleneck):
+                                                    fin_fst_percent_count += 1
+                                                    fst_set.append([1, point_distance(a, steiner_point) + point_distance(b,
+                                                                                                                       steiner_point) + point_distance(
+                                                        c, steiner_point), first_branch[6] + second_branch[6],
+                                                                    [[a, steiner_point], [b, steiner_point],
+                                                                     [c, steiner_point]]])
+                                            post_proc_sum += time.time() - post_proc_start
+                                    else:
+                                        a = second_branch[2][0][:2]
+                                        b = first_branch[:2]
+                                        c = second_branch[2][1][:2]
+                                        d = second_branch[2][2][:2]
+                                        cross_point = find_intersection(a, b, c, d)
+                                        cross_point_in_ab = (a[0] <= cross_point[0] <= b[0]) or (
+                                                    b[0] <= cross_point[0] <= a[0])
+                                        cross_point_in_cd = (c[0] <= cross_point[0] <= d[0]) or (
+                                                    d[0] <= cross_point[0] <= c[0])
+                                        if cross_point_in_ab and cross_point_in_cd:
+                                            if vertical_constraint(a, b, c, d) and vertical_constraint(c, d, a, b):
+                                                if ((is_point_in_cone(second_branch, first_branch) and (not conjecture or not dist_constraint(
+                                                        c, d,
+                                                        b))) and (not conjecture or not reverse_dist(
+                                                    c, d, b))):  # if the point is in the cone and distance constraints
+                                                    if not rhombus_on or (((quad_constraint(a, b, c) and quad_constraint(a, b,
+                                                                                                    d)) and quad_constraint(
+                                                            c,
+                                                            d,
+                                                            a)) and quad_constraint(
+                                                        c, d, b)):
+                                                        if cross_point not in [a, b, c, d]:
+                                                            fst_percent_count += 1
+                                                            post_proc_start = time.time()
+                                                            if not lune_post_on or all([terms_in_lune(a, cross_point, terminals, [a]),
+                                                                    terms_in_lune(b, cross_point, terminals, [b]),
+                                                                    terms_in_lune(c, cross_point, terminals, [c]),
+                                                                    terms_in_lune(d, cross_point, terminals, [d])]):
+                                                                if not bottle_post_on or bottle_constraint([a, b, c, d], cross_point, terminals,
+                                                                                     bottleneck):
+                                                                    fin_fst_percent_count += 1
+                                                                    fst_set.append(
+                                                                        [1, point_distance(a, b) + point_distance(c, d),
+                                                                         first_branch[6] + second_branch[6],
+                                                                         [[b, cross_point], [a, cross_point],
+                                                                          [c, cross_point],
+                                                                          [d, cross_point]]])
+                                                                post_proc_sum += time.time() - post_proc_start
                                 else:
-                                    a = second_branch[2][0][:2]
-                                    b = first_branch[:2]
-                                    c = second_branch[2][1][:2]
-                                    d = second_branch[2][2][:2]
-                                    cross_point = find_intersection(a, b, c, d)
-                                    cross_point_in_ab = (a[0] <= cross_point[0] <= b[0]) or (
-                                                b[0] <= cross_point[0] <= a[0])
-                                    cross_point_in_cd = (c[0] <= cross_point[0] <= d[0]) or (
-                                                d[0] <= cross_point[0] <= c[0])
-                                    if cross_point_in_ab and cross_point_in_cd:
-                                        if vertical_constraint(a, b, c, d) and vertical_constraint(c, d, a, b):
-                                            if ((is_point_in_cone(second_branch, first_branch) and (not conjecture or not dist_constraint(
-                                                    c, d,
-                                                    b))) and (not conjecture or not reverse_dist(
-                                                c, d, b))):  # if the point is in the cone and distance constraints
-                                                if not rhombus_on or (((quad_constraint(a, b, c) and quad_constraint(a, b,
-                                                                                                d)) and quad_constraint(
-                                                        c,
-                                                        d,
-                                                        a)) and quad_constraint(
-                                                    c, d, b)):
-                                                    if cross_point not in [a, b, c, d]:
-                                                        fst_percent_count += 1
-                                                        post_proc_start = time.time()
-                                                        if not lune_post_on or all([terms_in_lune(a, cross_point, terminals, [a]),
-                                                                terms_in_lune(b, cross_point, terminals, [b]),
-                                                                terms_in_lune(c, cross_point, terminals, [c]),
-                                                                terms_in_lune(d, cross_point, terminals, [d])]):
-                                                            if not bottle_post_on or bottle_constraint([a, b, c, d], cross_point, terminals,
-                                                                                 bottleneck):
-                                                                fin_fst_percent_count += 1
-                                                                fst_set.append(
-                                                                    [1, point_distance(a, b) + point_distance(c, d),
-                                                                     first_branch[6] + second_branch[6],
-                                                                     [[b, cross_point], [a, cross_point],
-                                                                      [c, cross_point],
-                                                                      [d, cross_point]]])
-                                                            post_proc_sum += time.time() - post_proc_start
-                            else:
-                                new_fst = reverse_melzak(first_branch, second_branch)
-                                if not any(edge is False for edge in new_fst):
-                                    edge_dists = [point_distance(edge[0], edge[1]) for edge in new_fst]
-                                    if not any(dist == 0 for dist in edge_dists):
-                                        post_proc_start = time.time()
-                                        fst_percent_count += 1
-                                        lunes_empty = True
-                                        if lune_post_on:
-                                            for edge in new_fst:
-                                                if not terms_in_lune(edge[0], edge[1], terminals, [edge[0], edge[1]]):
-                                                    lunes_empty = False
-                                                    break
-                                                if not lunes_empty:
-                                                    break
-                                        if lunes_empty:
-                                            distance_sum = sum(edge_dists)
-                                            hyperedge = first_branch[6] + second_branch[6]
-                                            fst_data = [k_sum, distance_sum, hyperedge, new_fst]
-                                            if not bottle_post_on or bottleneck_postproc(fst_data,bottleneck,terminals_short):
-                                                fin_fst_percent_count += 1
-                                                fst_set.append(fst_data)
-                                        post_proc_sum += time.time() - post_proc_start
-            if m <= math.ceil(i / 3) and i < kk:
-                for q in range(m, max(math.floor((i - m) / 2), 1)):
-                    print(m, q, i - (m + q))
-                    print("Checking ", len(branch_set[m]) * len(branch_set[q]) * len(branch_set[i - (m + q)]))
-                    for first_branch in branch_set[m]:
-                        for second_branch in branch_set[q]:
-                            for third_branch in branch_set[i - (m + q)]:
-                                if len(set([(branch[0], branch[1]) for branch in
-                                            [first_branch, second_branch, third_branch]])) == 3:
-                                    if (not bool(set(first_branch[6]) & set(second_branch[6])) and not bool(
-                                            set(first_branch[6]) & set(third_branch[6]))) and not bool(
-                                            set(third_branch[6]) & set(second_branch[6])):
-                                        bordercase = True
-                                        if m == q == 0:
-                                            if boundary_constraint(first_branch[:2], second_branch[:2],
-                                                                  hull_boundary) and hull.contains(
-                                                    Point(third_branch[:2])):
-                                                bordercase = False
-                                        if bordercase:
-                                            choices = [first_branch, second_branch, third_branch]
-                                            for choice in choices:
-                                                # if len(choice[2]) > 0:
-                                                #     print("MAYBE")
-                                                rest = [x for x in choices if x != choice]
-                                                if is_point_in_cone(rest[0], rest[1]) and is_point_in_cone(rest[1], rest[0]):
-                                                    NPx, NPy = NonPseudoPair(rest[0], rest[1])
-                                                    # if NPx[:2] not in [choice[:2],choice[3][:2],choice[4][:2]] and NPy[:2] not in [choice[:2],choice[3][:2],choice[4][:2]]:
-                                                    new_choice = choice.copy()
-                                                    new_choice[3], new_choice[4] = IntervalProjectionTest(new_choice,
-                                                                                                          NPx, NPy)
-                                                    if new_choice[
-                                                        3] != False:  # can make new_params once I add the bit where we project back onto the arc
-                                                        new_choice[3], new_choice[4] = simple_lune_ext(NPx, NPy,
-                                                                                                       new_choice,
-                                                                                                       terminals)
-                                                        if bottle_on and new_choice[3] != False:
-                                                            new_choice[3], new_choice[4] = bottle_full(NPx, NPy,
-                                                                                                       new_choice,
-                                                                                                       bottleneck, 0.01)
-                                                        if new_choice[3] != False:
-                                                            if (not rhombus_on or rhombus_ext(new_choice, NPx,
-                                                                                              NPy)) and (
-                                                                    not conjecture or alpha_ext(new_choice[3],
-                                                                                                new_choice[4], NPx,
-                                                                                                NPy)) and (
-                                                                    not triangle_on or triangle_ext(new_choice, NPx,
-                                                                                                    NPy, grid)):
-                                                                if triangle_on:
-                                                                    new_choice[3], new_choice[4] = iterated_triangle(NPx,NPy,new_choice,terminals)
-                                                                if new_choice[3] != False:
-                                                                    part4 += 1
-                                                                    branch_set[i + 1].append(
-                                                                        equipoint3(new_choice, rest[0], rest[1]))
+                                    new_fst = reverse_melzak(first_branch, second_branch)
+                                    if not any(edge is False for edge in new_fst):
+                                        edge_dists = [point_distance(edge[0], edge[1]) for edge in new_fst]
+                                        if not any(dist == 0 for dist in edge_dists):
+                                            post_proc_start = time.time()
+                                            fst_percent_count += 1
+                                            lunes_empty = True
+                                            if lune_post_on:
+                                                for edge in new_fst:
+                                                    if not terms_in_lune(edge[0], edge[1], terminals, [edge[0], edge[1]]):
+                                                        lunes_empty = False
+                                                        break
+                                                    if not lunes_empty:
+                                                        break
+                                            if lunes_empty:
+                                                distance_sum = sum(edge_dists)
+                                                hyperedge = first_branch[6] + second_branch[6]
+                                                fst_data = [k_sum, distance_sum, hyperedge, new_fst]
+                                                if not bottle_post_on or bottleneck_postproc(fst_data,bottleneck,terminals_short):
+                                                    fin_fst_percent_count += 1
+                                                    fst_set.append(fst_data)
+                                            post_proc_sum += time.time() - post_proc_start
+                if m <= math.ceil(i / 3) and i < kk:
+                    for q in range(m, max(math.floor((i - m) / 2), 1)):
+                        print(m, q, i - (m + q))
+                        print("Checking ", len(branch_set[m]) * len(branch_set[q]) * len(branch_set[i - (m + q)]))
+                        for first_branch in branch_set[m]:
+                            for second_branch in branch_set[q]:
+                                for third_branch in branch_set[i - (m + q)]:
+                                    if len(set([(branch[0], branch[1]) for branch in
+                                                [first_branch, second_branch, third_branch]])) == 3:
+                                        if (not bool(set(first_branch[6]) & set(second_branch[6])) and not bool(
+                                                set(first_branch[6]) & set(third_branch[6]))) and not bool(
+                                                set(third_branch[6]) & set(second_branch[6])):
+                                            bordercase = True
+                                            if m == q == 0:
+                                                if boundary_constraint(first_branch[:2], second_branch[:2],
+                                                                      hull_boundary) and hull.contains(
+                                                        Point(third_branch[:2])):
+                                                    bordercase = False
+                                            if bordercase:
+                                                choices = [first_branch, second_branch, third_branch]
+                                                for choice in choices:
+                                                    # if len(choice[2]) > 0:
+                                                    #     print("MAYBE")
+                                                    rest = [x for x in choices if x != choice]
+                                                    if is_point_in_cone(rest[0], rest[1]) and is_point_in_cone(rest[1], rest[0]):
+                                                        NPx, NPy = NonPseudoPair(rest[0], rest[1])
+                                                        # if NPx[:2] not in [choice[:2],choice[3][:2],choice[4][:2]] and NPy[:2] not in [choice[:2],choice[3][:2],choice[4][:2]]:
+                                                        new_choice = choice.copy()
+                                                        new_choice[3], new_choice[4] = IntervalProjectionTest(new_choice,
+                                                                                                              NPx, NPy)
+                                                        if new_choice[
+                                                            3] != False:  # can make new_params once I add the bit where we project back onto the arc
+                                                            new_choice[3], new_choice[4] = simple_lune_ext(NPx, NPy,
+                                                                                                           new_choice,
+                                                                                                           terminals)
+                                                            if bottle_on and new_choice[3] != False:
+                                                                new_choice[3], new_choice[4] = bottle_full(NPx, NPy,
+                                                                                                           new_choice,
+                                                                                                           bottleneck, 0.01)
+                                                            if new_choice[3] != False:
+                                                                if (not rhombus_on or rhombus_ext(new_choice, NPx,
+                                                                                                  NPy)) and (
+                                                                        not conjecture or alpha_ext(new_choice[3],
+                                                                                                    new_choice[4], NPx,
+                                                                                                    NPy)) and (
+                                                                        not triangle_on or triangle_ext(new_choice, NPx,
+                                                                                                        NPy, grid)):
+                                                                    if triangle_on:
+                                                                        new_choice[3], new_choice[4] = iterated_triangle(NPx,NPy,new_choice,terminals)
+                                                                    if new_choice[3] != False:
+                                                                        part4 += 1
+                                                                        branch_set[i + 1].append(
+                                                                            equipoint3(new_choice, rest[0], rest[1]))
 
     for FST in fst_set:
         FST[2].sort()
@@ -1302,6 +1326,7 @@ elif rand_check == "G":
     r = 1
 elif rand_check == "ER" or rand_check == "EGL":
     print("This function requires other programs, ignore if you are not the creator")
+    aa = int(input("Min number of terminals?"))
     bb = int(input("Max number of terminals?"))
     if rand_check == "EGL":
         perturb = float(input("How big a perturbation (0.0-1.0)? "))
@@ -1309,7 +1334,7 @@ elif rand_check == "ER" or rand_check == "EGL":
     parent_dir = join(os.getcwd(), "Input Files")
     parent_dir = join(parent_dir, rand_check[1:])
     test_inputs = sorted([int(f.name) for f in os.scandir(parent_dir) if f.is_dir()])
-    test_inputs = test_inputs[:int((bb/5))]
+    test_inputs = test_inputs[int((aa/5))-1:int((bb/5))]
     r = 5
 
 
@@ -1325,6 +1350,13 @@ ave_fst_size = []
 ave_deg4_num = []
 ave_deg3_num = []
 ave_fst_percent = []
+
+collected_times = []
+collected_gen_times = []
+collected_post_proc_times = []
+collected_concat_times = []
+collected_fst_numbers = []
+collected_deg4_numbers = []
 
 edge_counts = []
 triple_counts = []
@@ -1666,6 +1698,14 @@ for n in test_inputs:
     ave_deg4_num += [sum(deg4_num) / len(deg4_num)] if len(deg4_num) != 0 else [0]
     ave_fst_percent += [sum(fst_percent) / len(fst_percent)] if len(fst_percent) != 0 else [0]
     ave_deg3_num += [ave_fst_num[-1] - ave_deg4_num[-1]]
+
+    collected_times.append(times)
+    collected_gen_times.append(gen_times)
+    collected_post_proc_times.append(post_proc_times)
+    collected_concat_times.append(concat_times)
+    collected_fst_numbers.append(fst_num)
+    collected_deg4_numbers.append(deg4_num)
+
     print(ave_times)
     print(ave_gen_times)
     print(ave_post_proc_times)
@@ -1679,7 +1719,8 @@ for n in test_inputs:
 
 if r >= 1 and len(test_inputs) >= 1:
     full_results = [ave_times,ave_gen_times,ave_post_proc_times,ave_concat_times, ave_fst_num, ave_fst_size, ave_deg4_num,ave_fst_percent]
-
+    times_output = [collected_times, collected_gen_times, collected_post_proc_times, collected_concat_times,
+                    collected_fst_numbers, collected_deg4_numbers]
     directory = "k%s%s" % (kk, rand_check)
 
     # Parent Directory path
@@ -1696,6 +1737,9 @@ if r >= 1 and len(test_inputs) >= 1:
     timestr = time.strftime("%Y%m%d-%H%M%S")
     with open(os.path.join(path, 'k%s_%s_graphsteiner%s_%s_%s.txt' % (kk,rand_check,test_inputs[0], test_inputs[-1], timestr)), 'w+') as file:
         file.writelines([str(line) + "\n" for line in full_results])
+    with open(os.path.join(path, 'k%s_%s_collected%s_%s_%s.txt' % (
+            kk, rand_check, test_inputs[0], test_inputs[-1], timestr)), 'w+') as file:
+        file.writelines([str(line) + "\n" for line in times_output])
 
 if r >= 1 and len(test_inputs) > 1:
 
@@ -1761,7 +1805,6 @@ if r >= 1 and len(test_inputs) > 1:
     plt.xlabel('# of terminals')
     plt.ylabel('/% of FSTs elim by lune test')
     plt.savefig(os.path.join(path, 'k%s%selim' % (kk,rand_check)))
-
     plt.close()
     ###########################################################################
     Times = {
@@ -1803,4 +1846,5 @@ if r >= 1 and len(test_inputs) > 1:
     ax.set_title("Number of FSTs vs Terminals by Presence of Degree 4 Steiner points")
     ax.legend(loc="upper left")
     plt.savefig(os.path.join(path, 'k%s%sdeg4' % (kk,rand_check)))
-    plt.show()
+
+    plt.close()
